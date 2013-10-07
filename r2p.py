@@ -1377,10 +1377,10 @@ class Transport(object):
             for sub in self.subscribers:
                 if sub.has_topic(topic.name):
                     return sub
-            sub = self._create_subscriber(topic, self, queue_length)
+            sub = self._create_subscriber(topic, queue_length)
             sub.notify_subscribed(topic)
-            topic.subscribe_remote(sub, queue_length)
-            self.susbcribers.append(sub)
+            topic.subscribe_remote(sub)
+            self.subscribers.append(sub)
             return sub
     
     
@@ -1444,7 +1444,7 @@ class Transport(object):
         # return XxxPublisher<RemotePublisher>()
         
         
-    def _create_subscriber(self, topic, transport, queue_length):
+    def _create_subscriber(self, topic, queue_length):
         raise NotImplementedError()
         # return XxxSubscriber<RemoteSubscriber>()
 
@@ -1530,6 +1530,7 @@ class Middleware(object):
 
             
     def stop(self):
+        trigger = False
         with _sys_lock:
             if not self.stopped:
                 self.stopped = True
@@ -2203,11 +2204,11 @@ class DebugTransport(Transport):
                 raise ValueError("Unknown management message type '%s'" % typechar)
         
         
-    def _create_publisher(self):
+    def _create_publisher(self, topic):
         return DebugPublisher(self)
         
         
-    def _create_subscriber(self, queue_length):
+    def _create_subscriber(self, topic, queue_length):
         return DebugSubscriber(self, queue_length)
     
     

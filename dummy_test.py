@@ -130,10 +130,10 @@ def _main():
         
     except Exception as e:
         logging.exception(str(e))
-        _mw._stop()
         raise
     
     finally:
+        _mw._stop()
         time.sleep(1)
         node1_thread.join()
         node2_thread.join()
