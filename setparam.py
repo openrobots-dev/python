@@ -1,0 +1,119 @@
+#!/usr/bin/env python2
+
+import sys, os
+import logging
+import argparse
+import r2p
+from helpers import *
+
+
+def _create_argsparser():
+    parser = argparse.ArgumentParser(
+        description='R2P set app parameter'
+    )
+    
+    parser.add_argument(
+        '-v', '--verbose', required=False, action='count', default=0,
+        help='verbosity level (default %(default)s): 0=critical, 1=error, 2=warning, 3=info, 4=debug',
+        dest='verbosity'
+    )
+    
+    group = parser.add_argument_group('transport setup')
+    group.add_argument(
+        '-p', '--transport', required=False, nargs='+',
+        default=['DebugTransport', 'SerialLineIO', '/dev/ttyUSB0', 115200],
+        help='transport parameters',
+        dest='transport', metavar='PARAMS'
+    )
+    group.add_argument(
+        '-t', '--boot-topic', required=True,
+        help='name of the bootloader topic for the target R2P module; format: "[\\w]{1,%d}"' % r2p.MODULE_NAME_MAX_LENGTH,
+        dest='topic', metavar='BOOT_TOPIC'
+    )
+    
+    group = parser.add_argument_group('parameter setup')
+    group.add_argument(
+        '-n', '--app-name', required=True,
+        help='name of the app (R2P Node); format: "[\\w]{1,%d}"' % r2p.NODE_NAME_MAX_LENGTH,
+        dest='appname', metavar='APP_NAME'
+    )
+    group.add_argument(
+        '-o', '--param-offset', required=True,
+        help='offset of the target parameter, relative to the app config struct',
+        dest='offset', metavar='OFFSET'
+    )
+    group.add_argument(
+        '-b', '--param-bytes', required=True,
+        help='parameter value, as hex byte stream; format: "([0-9A-Fa-f]{2})+"',
+        dest='value', metavar='HEX_BYTES'
+    )
+        
+    return parser
+
+
+def _main():
+    parser = _create_argsparser()
+    args = parser.parse_args()
+    
+    logging.basicConfig(stream=sys.stderr, level=verbosity2level(int(args.verbosity)))
+    logging.debug('sys.argv = ' + repr(sys.argv))
+    
+    # TODO: Automate transport construction from "--transport" args
+    assert args.transport[0] == 'DebugTransport'
+    assert args.transport[1] == 'SerialLineIO'
+    lineio = r2p.SerialLineIO(str(args.transport[2]), int(args.transport[3]))
+    transport = r2p.DebugTransport('dbgtra', lineio)
+    
+    mw = r2p.Middleware.instance()
+    
+    node = r2p.Node('GETPARAM')
+    pub = r2p.Publisher()
+    sub = r2p.Subscriber(100)
+    bootloader = r2p.BootloaderMaster(pub, sub)
+    
+    rpub = r2p.DebugPublisher(transport)
+    rsub = r2p.DebugSubscriber(transport, 100)
+    
+    try:
+        exception = None
+        mw.initialize()
+        transport.open()
+        
+        node.begin()
+        node.advertise(pub, args.topic, r2p.Time_INFINITE, r2p.BootMsg)
+        node.subscribe(sub, args.topic, r2p.BootMsg)
+        
+        transport.advertise(rpub, args.topic, r2p.Time_INFINITE, r2p.BootMsg) # FIXME: Should be automatic
+        transport.subscribe(rsub, args.topic, r2p.BootMsg) # FIXME: Should be automatic
+        transport.notify_stop()
+        
+        bootloader.initialize()
+        
+        bootloader.set_parameter(appname = str(args.appname),
+                                 offset = autoint(args.offset),
+                                 value = hexb2str(str(args.value)))
+
+    except KeyboardInterrupt as exception:
+        pass
+    
+    except Exception as exception:
+        print '~' * 80
+        raise
+
+    finally:
+        if exception is not None:
+            logging.critical(exception)
+        
+        node.end()
+        mw.uninitialize()
+        transport.close()
+        
+        if exception is not None:
+            raise exception
+
+
+if __name__ == '__main__':
+    try:
+        _main()
+    except Exception as e:
+        raise
