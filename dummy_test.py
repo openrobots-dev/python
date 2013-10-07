@@ -128,11 +128,13 @@ def _main():
         while r2p.ok():
             time.sleep(1)
         
-    except:
+    except Exception as e:
+        logging.exception(str(e))
         _mw._stop()
         raise
     
     finally:
+        time.sleep(1)
         node1_thread.join()
         node2_thread.join()
         #node3_thread.join()

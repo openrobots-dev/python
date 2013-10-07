@@ -311,37 +311,34 @@ class MemoryPool(object):
     
     def __init__(self, type):
         self._type = type
-        self._pool = collections.deque()
-        self._maxlen = 0
+        self._free_queue = Queue.LifoQueue()
         self._lock = threading.Lock()
         
         
     def alloc(self):
-        with self._lock:
-            if len(self._pool) == 0:
-                raise IndexError('empty')
-            return self._pool.pop()
+        item = self._free_queue.get_nowait()
+        self._free_queue.task_done()
+        return item
         
         
     def free(self, item):
-        with self._lock:
-            if len(self._pool) == self._maxlen:
-                raise IndexError('full')
+        self._free_queue.put_nowait(item)
     
     
     def extend(self, length, items=[], ctor_args=(), ctor_kwargs={}):
-        length = int(length)
+        length = len(items)
         assert length > 0
         lenitems = len(items)
         assert not lenitems > 0 or lenitems == length
         
-        with self._lock:
-            self._maxlen += length
-            if lenitems > 0:
-                self._pool.extend(items)
-            else:
-                for i in xrange(length):
-                    self._pool.append(self._type(*ctor_args, **ctor_kwargs))
+        if lenitems > 0:
+            for item in items:
+                self.free(item)
+        else:
+            for i in xrange(length):
+                item = self._type(*ctor_args, **ctor_kwargs)
+                self.free(item)
+            
 
 #==============================================================================
 
@@ -349,68 +346,41 @@ class ArrayQueue(object):
     
     def __init__(self, length):
         length = int(length)
-        if length <= 0:
-            raise ValueError('length=%d <= 0' % length)
+        assert length > 0
         self.length = length
-        self._items = [ None, ] * length
-        self._head_index = 0
-        self._tail_index = 0
-        self._used = 0
-        self._lock = threading.Lock()
+        self._queue = Queue.Queue(length)
         
         
     def post(self, item):
-        with self._lock:
-            if self._used == self.length:
-                raise IndexError('full')
-            self._items[self._tail_index] = item
-            self._used += 1
-            self._tail_index += 1
-            if self._tail_index == self.length:
-                self._tail_index = 0
+        self._queue.put_nowait(item)
             
             
     def fetch(self):
-        with self._lock:
-            if self._used == 0:
-                raise IndexError('empty')
-            item = self._items[self._head_index]
-            self._used -= 1
-            self._head_index += 1
-            if self._head_index == self.length:
-                self._head_index = 0
-            return item
+        item = self._queue.get_nowait()
+        self._queue.task_done()
+        return item
 
 #==============================================================================
 
 class EventQueue(object):
 
     def __init__(self):
-        self._queue = collections.deque()
-        self._lock = threading.Lock()
-        self._cv = threading.Condition(self._lock)
+        self._queue = Queue.Queue()
 
 
-    def signal(self, item=None, max_notifies=0):
-        with self._cv:
-            self._queue.append(item)
-            if max_notifies == 0:
-                self._cv.notify_all()
-            elif max_notifies > 0:
-                self._cv_notify(max_notifies)
-            else:
-                raise ValueError('max_notifies=%d < 0' % max_notifies)
+    def signal(self, item=None):
+        self._queue.put_nowait(item)
     
     
     def wait(self, timeout=Time_INFINITE):
-        with self._cv:
-            if timeout == Time_INFINITE:
-                self._cv.wait()
-            else:
-                self._cv.wait(timeout.to_s())
-                if len(self._queue) == 0:
-                    raise TimeoutError()
-            return self._queue.popleft()
+        if timeout == Time_IMMEDIATE:
+            item = self._queue.get_nowait()
+        elif timeout == Time_INFINITE:
+            item = self._queue.get()
+        else:
+            item = self._queue.get(True, timeout.to_s())
+        self._queue.task_done()
+        return item
 
 #==============================================================================
 
@@ -426,12 +396,13 @@ class IhexRecord(Serializable):
         START_LINEAR_ADDRESS        = 5
     
     
-    def __init__(self):
-        self.count = 0
-        self.offset = 0
-        self.type = -1
-        self.data = ''
-        self.checksum = 0
+    def __init__(self, count=0, offset=0, type=None, data='', checksum=0):
+        super(IhexRecord, self).__init__()
+        self.count = count
+        self.offset = offset
+        self.type = type
+        self.data = data
+        self.checksum = checksum
     
         
     def __repr__(self):
@@ -512,7 +483,7 @@ class IhexRecord(Serializable):
 class Message(Serializable):
     
     def __init__(self):
-        Serializable.__init__(self)
+        super(Message, self).__init__(self)
 
 #==============================================================================
 
@@ -562,15 +533,16 @@ class BootMsg(Message):
             LENGTH          = 5
             CHUNK           = 6
         
-        def __init__(self):
-            self.line = 0
-            self.reason = 0
-            self.type = 0
-            self.text = ''
-            self.integral = 0
-            self.uintegral = 0
-            self.address = 0
-            self.length = 0
+        def __init__(self, line=0, reason=0, type=0, text='', integral=0, uintegral=0, address=0, length=0):
+            super(BootMsg.ErrorInfo, self).__init__()
+            self.line = line
+            self.reason = reason
+            self.type = type
+            self.text = text
+            self.integral = integral
+            self.uintegral = uintegral
+            self.address = address
+            self.length = length
         
         def __repr__(self):
             e = self.TypeEnum
@@ -615,12 +587,13 @@ class BootMsg(Message):
         class FlagsEnum:
             ENABLED = (1 << 0)
         
-        def __init__(self):
-            self.pgmlen = 0
-            self.bsslen = 0
-            self.datalen = 0
-            self.stacklen = 0
-            self.name = ''
+        def __init__(self, pgmlen=0, bsslen=0, datalen=0, stacklen=0, name='', flags=(1 << 0)):
+            super(BootMsg.LinkingSetup, self).__init__()
+            self.pgmlen = pgmlen
+            self.bsslen = bsslen
+            self.datalen = datalen
+            self.stacklen = stacklen
+            self.name = name
             self.flags = self.FlagsEnum.ENABLED
         
         def marshal(self):
@@ -634,13 +607,14 @@ class BootMsg(Message):
 
 
     class LinkingAddresses(Serializable):
-        def __init__(self):
-            self.infoadr = 0
-            self.pgmadr = 0
-            self.bssadr = 0
-            self.dataadr = 0
-            self.datapgmadr = 0
-            self.nextadr = 0
+        def __init__(self, infoadr=0, pgmadr=0, bssadr=0, dataadr=0, datapgmadr=0, nextadr=0):
+            super(BootMsg.LinkingAddresses, self).__init__()
+            self.infoadr = infoadr
+            self.pgmadr = pgmadr
+            self.bssadr = bssadr
+            self.dataadr = dataadr
+            self.datapgmadr = datapgmadr
+            self.nextadr = nextadr
         
         def marshal(self):
             return struct.pack('<LLLLLL', self.infoadr, self.pgmadr, self.bssadr,
@@ -653,14 +627,15 @@ class BootMsg(Message):
 
 
     class LinkingOutcome(Serializable):
-        def __init__(self):
-            self.mainadr = 0
-            self.cfgadr = 0
-            self.cfglen = 0
-            self.ctorsadr = 0
-            self.ctorslen = 0
-            self.dtorsadr = 0
-            self.dtorslen = 0
+        def __init__(self, mainadr=0, cfgadr=0, cfglen=0, ctorsadr=0, ctorslen=0, dtorsadr=0, dtorslen=0):
+            super(BootMsg.LinkingOutcome, self).__init__()
+            self.mainadr = mainadr
+            self.cfgadr = cfgadr
+            self.cfglen = cfglen
+            self.ctorsadr = ctorsadr
+            self.ctorslen = ctorslen
+            self.dtorsadr = dtorsadr
+            self.dtorslen = dtorslen
             
         def marshal(self):
             return struct.pack('<LLLLLLL', self.mainadr, self.cfgadr, self.cfglen,
@@ -669,17 +644,18 @@ class BootMsg(Message):
         def unmarshal(self, data, offset=0):
             self.__init__()
             self.mainadr, self.cfgadr, self.cfglen, self.ctorsadr, self.dtorslen, self.dtorsadr, self.dtorslen = \
-              struct.unpack_from('<LLLLLLL', data, offset)
+                struct.unpack_from('<LLLLLLL', data, offset)
 
 
     class AppInfoSummary(Serializable):
-        def __init__(self):
-            self.numapps = 0
-            self.freeadr = 0
-            self.pgmstartadr = 0
-            self.pgmendadr = 0
-            self.ramstartadr = 0
-            self.ramendadr = 0
+        def __init__(self, numapps=0, freeadr=0, pgmstartadr=0, pgmendadr=0, ramstartadr=0, ramendadr=0):
+            super(BootMsg.AppInfoSummary, self).__init__()
+            self.numapps = numapps
+            self.freeadr = freeadr
+            self.pgmstartadr = pgmstartadr
+            self.pgmendadr = pgmendadr
+            self.ramstartadr = ramstartadr
+            self.ramendadr = ramendadr
         
         def marshal(self):
             return struct.pack('<LLLLLL', self.numapps, self.freeadr,
@@ -688,16 +664,16 @@ class BootMsg(Message):
         
         def unmarshal(self, data, offset=0):
             self.__init__()
-            self.numapps, self.freeadr, self.pgmstartadr, self.pgmendadr, \
-            self.ramstartadr, self.ramendadr, \
-                = struct.unpack_from('<LLLLLL', data, offset)
+            self.numapps, self.freeadr, self.pgmstartadr, self.pgmendadr, self.ramstartadr, self.ramendadr = \
+                struct.unpack_from('<LLLLLL', data, offset)
 
 
     class ParamRequest(Serializable):
-        def __init__(self):
-            self.offset = 0
-            self.appname = ''
-            self.length = 0
+        def __init__(self, offset=0, appname='', length=0):
+            super(BootMsg.ParamRequest, self).__init__()
+            self.offset = offset
+            self.appname = appname
+            self.length = length
         
         def marshal(self):
             return struct.pack('<L%dsB' % NODE_NAME_MAX_LENGTH,
@@ -712,8 +688,9 @@ class BootMsg(Message):
     class ParamChunk(Serializable):
         MAX_DATA_LENGTH = 16
 
-        def __init__(self):
-            self.data = ''
+        def __init__(self, data=''):
+            super(BootMsg.ParamChunk, self).__init__()
+            self.data = data
             
         def marshal(self):
             assert len(self.data) <= self.MAX_DATA_LENGTH
@@ -724,8 +701,10 @@ class BootMsg(Message):
             self.data = data[:self.MAX_DATA_LENGTH]
 
 
-    def __init__(self, type=None, *args, **kwargs):
-        self.type = -1
+    def __init__(self, type=None):
+        super(BootMsg, self).__init__()
+        
+        self.type = type
         # TODO: Initialize all types to None, and build only when needed
         self.ihex_record = IhexRecord()
         self.error_info = self.ErrorInfo()
@@ -769,7 +748,7 @@ class BootMsg(Message):
         self.type = type # TODO: Build only the needed type
     
     
-    def set_error_info(self, line, reason, type, *args, **kwargs):
+    def set_error_info(self, line, reason, type):
         self.clean(BootMsg.TypeEnum.NACK)
         self.error_info.line = line
         self.error_info.reason = reason
@@ -891,11 +870,12 @@ class MgmtMsg(Message):
     
     
     class Path(Serializable):
-        def __init__(self, _MgmtMsg):
+        def __init__(self, _MgmtMsg, module='', node='', topic=''):
+            super(MgmtMsg.Path, self).__init__()
             self._MgmtMsg = _MgmtMsg
-            self.module = ''
-            self.node = ''
-            self.topic = ''
+            self.module = module
+            self.node = node
+            self.topic = topic
         
         def marshal(self):
             lengths = (MODULE_NAME_MAX_LENGTH, NODE_NAME_MAX_LENGTH, TOPIC_NAME_MAX_LENGTH)
@@ -907,27 +887,29 @@ class MgmtMsg(Message):
     
     
     class PubSub(Serializable):
-        def __init__(self, _MgmtMsg):
+        def __init__(self, _MgmtMsg, topic='', transport=None, queue_length=0, raw_params=''):
+            super(MgmtMsg.PubSub, self).__init__()
             self._MgmtMsg = _MgmtMsg
             self.MAX_RAW_PARAMS_LENGTH = _MgmtMsg.MAX_PAYLOAD_LENGTH - TOPIC_NAME_MAX_LENGTH - 4 - 1
-            self.topic = ''
-            self.transport = None
-            self.queue_length = 0
-            self.raw_params = ''
+            self.topic = topic
+            self.transport = transport
+            self.queue_length = queue_length
+            self.raw_params = raw_params
         
         def marshal(self):
-            return struct.pack('<%dsB%dsL' % (self._MgmtMsg.MAX_PAYLOAD_LENGTH, self.MAX_RAW_PARAMS_LENGTH),
+            return struct.pack('<%dsB%dsL' % (_MgmtMsg.MAX_PAYLOAD_LENGTH, self.MAX_RAW_PARAMS_LENGTH),
                                self.topic, self.queue_length, self.raw_params, 0xDEADBEEF)
                                
         def unmarshal(self, data, offset=0):
             self.topic, self.queue_length, self.raw_params, self.transport = \
-                struct.unpack_from('<%dsB%dsL' % (self._MgmtMsg.MAX_PAYLOAD_LENGTH, self.MAX_RAW_PARAMS_LENGTH), data, offset)
+                struct.unpack_from('<%dsB%dsL' % (_MgmtMsg.MAX_PAYLOAD_LENGTH, self.MAX_RAW_PARAMS_LENGTH), data, offset)
     
     
     class Module(Serializable):
         
         class Flags(Serializable):
             def __init__(self, intval=0):
+                super(MgmtMsg.Module.Flags, self).__init__()
                 self.stopped = bool(intval & (1 << 0))
             
             def __int__(self):
@@ -939,10 +921,11 @@ class MgmtMsg(Message):
             def unmarshal(self, data, offset=0):
                 self.__init__(struct.unpack_from('<B', data, offset))
         
-        def __init__(self, _MgmtMsg):
+        def __init__(self, _MgmtMsg, module='', flags=None):
+            super(MgmtMsg.Module, self).__init__()
             self._MgmtMsg = _MgmtMsg
-            self.module = ''
-            self.flags = self.Flags()
+            self.module = module
+            self.flags = flags if flags is not None else self.Flags()
         
         def marshal(self):
             return struct.pack('<%ds' % MODULE_NAME_MAX_LENGTH, _MODULE_NAME) + self.flags.marshal()
@@ -952,8 +935,9 @@ class MgmtMsg(Message):
             self.flags.unmarshal(data, offset + MODULE_NAME_MAX_LENGTH)
     
     
-    def __init__(self):
-        self.type = None
+    def __init__(self, type=None):
+        super(MgmtMsg, self).__init__()
+        self.type = type
         self.path = MgmtMsg.Path(self)
         self.pubsub = MgmtMsg.PubSub(self)
         self.module = MgmtMsg.Module(self)
@@ -1043,15 +1027,17 @@ class Topic(object):
     
     
     def is_awaiting_advertisements(self):
-        return not self.has_local_publishers() and \
-               not self.has_remote_publishers() and \
-                   self.has_local_subscribers()
+        with self._lock:
+            return not self.has_local_publishers() and \
+                   not self.has_remote_publishers() and \
+                       self.has_local_subscribers()
     
         
     def is_awaiting_subscriptions(self):
-        return not self.has_local_subscribers() and \
-               not self.has_remote_subscribers() and \
-                   self.has_local_publishers()
+        with self._lock:
+            return not self.has_local_subscribers() and \
+                   not self.has_remote_subscribers() and \
+                       self.has_local_publishers()
     
     
     def alloc(self):
@@ -1134,9 +1120,9 @@ class BasePublisher(object):
     
     def publish(self, msg):
         deadline = Time.now() + self.topic.publish_timeout
-        # FIXME  and salta se manca local sub [MARTINO]
-        return self.topic.notify_locals(msg, deadline) or \
-               self.topic.notify_remotes(msg, deadline)
+        locals_done = self.topic.notify_locals(msg, deadline)
+        remotes_done = self.topic.notify_remotes(msg, deadline)
+        return locals_done and remotes_done
     
     
     def publish_locally(self, msg):
@@ -1318,9 +1304,12 @@ class Node(object):
         
         
     def spin(self, timeout=Time_INFINITE):
-        sub = None
-        while sub is None:
-            sub = self.notification_queue.wait(timeout)
+        try:
+            sub = None
+            while sub is None:
+                sub = self.notification_queue.wait(timeout)
+        except Queue.Empty:
+            return
         
         with self._subscribers_lock:
             assert sub in self.subscribers
@@ -1506,15 +1495,15 @@ class Middleware(object):
         self.stopped = False
         self.num_running_nodes = 0
         
+        self.add_topic(self.boot_topic)
+        self.add_topic(self.mgmt_topic)
+        
         
     def initialize(self, module_name=None, bootloader_name=None):
         if module_name is not None:
             self.module_name = str(module_name)
         if bootloader_name is not None:
             self.bootloader_name = str(bootloader_name)
-        
-        self.add_topic(self.boot_topic)
-        self.add_topic(self.mgmt_topic)
         
         self.mgmt_boot_thread = threading.Thread(name="R2P_MGMT", target=self.mgmt_threadf, args=(self,))
         self.mgmt_boot_thread.start()
@@ -1667,6 +1656,7 @@ class Middleware(object):
             self.topics.append(topic)
             return topic
 
+
     def mgmt_cb(self, msg):
         if msg.type == MgmtMsg.TypeEnum.CMD_ADVERTISE:
             logging.debug('CMD_ADVERTISE')
@@ -1690,14 +1680,15 @@ class Middleware(object):
             rpub = msg.pubsub.transport.touch_publisher(topic)
             topic.advertise_remote(rpub, Time_INFINITE) # FIXME: timeout 
     
+    
     def mgmt_threadf(self, thread):
         node = Node('R2P_MGMT')
-        self.pub = Publisher()
-        self.sub = Subscriber(5, self.mgmt_cb) # TODO: configure # FIXME: it looks like sub.fetch() does not work [MARTINO]
+        pub = Publisher()
+        sub = Subscriber(5, self.mgmt_cb) # TODO: configure
         
         node.begin()
-        node.advertise(self.pub, 'R2P', Time.ms(200), MgmtMsg) # TODO: configure
-        node.subscribe(self.sub, 'R2P', MgmtMsg) # TODO: configure
+        node.advertise(pub, 'R2P', Time.ms(200), MgmtMsg) # TODO: configure
+        node.subscribe(sub, 'R2P', MgmtMsg) # TODO: configure
         
         while ok():
             try:
@@ -1710,7 +1701,7 @@ class Middleware(object):
         node.end()
         
         
-    def boot_threadf(self, thread):
+    def boot_threadf(self):
         pass #  TODO
         
 #==============================================================================
@@ -1744,7 +1735,6 @@ class SerialLineIO(LineIO):
     def __init__(self, dev_path, baud):
         super(SerialLineIO, self).__init__()
         self._ser = None
-        self._sio = None
         self._dev_path = dev_path
         self._baud = baud
         self._read_lock = threading.Lock()
@@ -1752,27 +1742,22 @@ class SerialLineIO(LineIO):
     
     
     def open(self):
-        self._ser = serial.Serial(self._dev_path, self._baud)
-#        self._sio = io.TextIOWrapper(buffer = io.BufferedRWPair(self._ser, self._ser, 1),
-#                                      newline = '\r\n',
-#                                      line_buffering = True,
-#                                      encoding = 'ascii')
-        self._sio = io.TextIOWrapper(buffer = io.BufferedRWPair(self._ser, self._ser, 1024),
-                                     newline = '\r\n',
-                                     line_buffering = True,
-                                     encoding = 'ascii')
-
+        if self._ser is None:
+            self._ser = serial.Serial(port = self._dev_path, baud = self._baud, timeout = 3)
+    
         
     def close(self):
-        self._ser.close()
-        self._ser = None
-        self._sio = None
+        if self._ser is not None:
+            self._ser.close()
+            self._ser = None
     
     
     def readln(self):
         with self._read_lock:
-            line = self._ser.readline().rstrip('\r\n') # FIXME: this works [MARTINO]
-#            line = self._sio.readline().rstrip('\r\n')
+            line = self._ser.readline(None, '\r\n')
+            if line[-2:] != '\r\n':
+                raise TimeoutError()
+            line = line[:-2]
         logging.debug("%s >>> '%s'" % (self._dev_path, line))
         return line
     
@@ -1780,7 +1765,9 @@ class SerialLineIO(LineIO):
     def writeln(self, line):
         logging.debug("%s <<< '%s'" % (self._dev_path, line))
         with self._write_lock:
-            self._sio.write(unicode(line + '\r\n'));
+            self._ser.write(line);
+            self._ser.write('\r\n')
+            self._ser.flush()
     
 #==============================================================================
     
@@ -1788,7 +1775,8 @@ class StdLineIO(LineIO):
     
     def __init__(self):
         super(StdLineIO, self).__init__()
-        self._lock = threading.Lock()
+        self._read_lock = threading.Lock()
+        self._write_lock = threading.Lock()
     
     
     def open(self):
@@ -1800,7 +1788,7 @@ class StdLineIO(LineIO):
     
     
     def readln(self):
-        with self._lock:
+        with self._read_lock:
             line = raw_input()
         logging.debug("stdin <<< '%s'" % line)
         return line
@@ -1808,7 +1796,7 @@ class StdLineIO(LineIO):
     
     def writeln(self, line):
         logging.debug("stdout >>> '%s'" % line)
-        with self._lock:
+        with self._write_lock:
             print line
 
 #==============================================================================
@@ -1870,7 +1858,7 @@ class DebugSubscriber(RemoteSubscriber):
                 self.queue.post((msg, deadline)) # throws IndexError
                 self.transport._sub_queue.signal(self)
             except IndexError:
-                logging.warning('Notify failed (IndexError)')
+                logging.warning('Notify failed (IndexError)') # FIXME: Sporadic error, but still works...
                 
     
     
@@ -2091,13 +2079,20 @@ class DebugTransport(Transport):
     
         
     def _recv(self):
-        line = self._lineio.readln()
-        parser = self.MsgParser(line)
         cs = Checksummer()
-        
-        # Receive the incoming message
-#        parser.expect_char('@')
-        parser.skip_after_char('@') # FIXME: is this better? [MARTINO]
+        while True:
+            with self._running_lock:
+                if not self._running:
+                    return None
+            
+            # Receive the incoming message
+            line = self._lineio.readln()
+            parser = self.MsgParser(line)
+            try:
+                parser.skip_after_char('@')
+                break
+            except ParserError:
+                pass
         deadline = parser.read_unsigned(4)
         cs.add_uint(deadline)
         
@@ -2225,7 +2220,10 @@ class DebugTransport(Transport):
         try:
             while self._is_running():
                 fields = self._recv()
+                if fields is None:
+                    break
                 t = fields[0]
+                
                 if t == Transport.TypeEnum.MESSAGE:
                     topic = Middleware.instance().find_topic(fields[1])
                     if topic is None:

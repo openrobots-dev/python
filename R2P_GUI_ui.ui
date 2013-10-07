@@ -1,0 +1,1081 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>window</class>
+ <widget class="QMainWindow" name="window">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>640</width>
+    <height>500</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>R2P bootloader</string>
+  </property>
+  <widget class="QWidget" name="centralWidget">
+   <layout class="QGridLayout" name="gridLayout">
+    <item row="0" column="0">
+     <widget class="QTabWidget" name="tabWidget">
+      <property name="currentIndex">
+       <number>2</number>
+      </property>
+      <widget class="QWidget" name="tabLogical">
+       <attribute name="title">
+        <string>&amp;Logical network</string>
+       </attribute>
+       <attribute name="toolTip">
+        <string>Bottom-up R2P network view</string>
+       </attribute>
+       <layout class="QGridLayout" name="gridLayout_4">
+        <item row="0" column="0">
+         <layout class="QHBoxLayout" name="horizontalLayout_8">
+          <item>
+           <widget class="QPushButton" name="pushLogicalCollapse">
+            <property name="text">
+             <string>&amp;Collapse all</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushLogicalExpand">
+            <property name="text">
+             <string>&amp;Expand all</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer_3">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushLogicalRefresh">
+            <property name="text">
+             <string>&amp;Refresh</string>
+            </property>
+            <property name="autoDefault">
+             <bool>true</bool>
+            </property>
+            <property name="default">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="1" column="0">
+         <widget class="QTreeView" name="treeLogical"/>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabPhysical">
+       <attribute name="title">
+        <string>&amp;Physical network</string>
+       </attribute>
+       <attribute name="toolTip">
+        <string>Top-down R2P network view</string>
+       </attribute>
+       <layout class="QGridLayout" name="gridLayout_3">
+        <item row="0" column="0">
+         <layout class="QHBoxLayout" name="horizontalLayout_6">
+          <item>
+           <widget class="QPushButton" name="pushPhysicalCollapse">
+            <property name="toolTip">
+             <string>Collapses the tree view</string>
+            </property>
+            <property name="text">
+             <string>&amp;Collapse all</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushPhysicalExpand">
+            <property name="toolTip">
+             <string>Expands the tree view</string>
+            </property>
+            <property name="text">
+             <string>&amp;Expand all</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer_2">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushPhysicalRefresh">
+            <property name="toolTip">
+             <string>Refreshes the network tree view</string>
+            </property>
+            <property name="text">
+             <string>&amp;Refresh</string>
+            </property>
+            <property name="autoDefault">
+             <bool>true</bool>
+            </property>
+            <property name="default">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="1" column="0">
+         <widget class="QTreeView" name="treePhysical"/>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabBootloader">
+       <attribute name="title">
+        <string>&amp;Bootloader</string>
+       </attribute>
+       <attribute name="toolTip">
+        <string>App bootloader</string>
+       </attribute>
+       <layout class="QGridLayout" name="gridLayout_2">
+        <item row="0" column="0">
+         <layout class="QHBoxLayout" name="horizontalLayout_4">
+          <item>
+           <widget class="QLabel" name="labelBootTopic">
+            <property name="text">
+             <string>Boot topic</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLineEdit" name="lineBootTopic">
+            <property name="toolTip">
+             <string>Bootloader topic name of the target module</string>
+            </property>
+            <property name="placeholderText">
+             <string notr="true">BOOT_MyModule</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeType">
+             <enum>QSizePolicy::Minimum</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushBootRefresh">
+            <property name="toolTip">
+             <string>Refreshes the list of installed apps on the chosen module</string>
+            </property>
+            <property name="text">
+             <string>&amp;Refresh</string>
+            </property>
+            <property name="autoDefault">
+             <bool>true</bool>
+            </property>
+            <property name="default">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="1" column="0">
+         <widget class="QTableView" name="tableApps">
+          <property name="toolTip">
+           <string>Installed apps</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <layout class="QFormLayout" name="formLayout_2">
+          <property name="fieldGrowthPolicy">
+           <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
+          </property>
+          <item row="0" column="0">
+           <widget class="QLabel" name="label">
+            <property name="text">
+             <string>Module path</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <layout class="QHBoxLayout" name="horizontalLayout_2">
+            <item>
+             <widget class="QLineEdit" name="lineModulePath">
+              <property name="toolTip">
+               <string>Path of the target module firmware root folder</string>
+              </property>
+              <property name="placeholderText">
+               <string>/opt/r2p/modules/MyModule</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushModulePath">
+              <property name="text">
+               <string>...</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="labelAppPath">
+            <property name="text">
+             <string>App path</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <layout class="QHBoxLayout" name="horizontalLayout_5">
+            <item>
+             <widget class="QLineEdit" name="lineAppPath">
+              <property name="toolTip">
+               <string>Path of the app root folder</string>
+              </property>
+              <property name="placeholderText">
+               <string notr="true">/opt/r2p/apps/MyApp</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushAppPath">
+              <property name="text">
+               <string>...</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="labelAppName">
+            <property name="text">
+             <string>App name</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QLineEdit" name="lineAppName">
+            <property name="toolTip">
+             <string>App identifier</string>
+            </property>
+            <property name="placeholderText">
+             <string notr="true">MyApp</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="0">
+           <widget class="QLabel" name="labelStackSize">
+            <property name="text">
+             <string>Stack size</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="1">
+           <widget class="QSpinBox" name="spinStackSize">
+            <property name="toolTip">
+             <string>Size of the stack allocated for the app main thread, *INCLUDING* the Thread Control Block</string>
+            </property>
+            <property name="suffix">
+             <string> B</string>
+            </property>
+            <property name="minimum">
+             <number>32</number>
+            </property>
+            <property name="maximum">
+             <number>16384</number>
+            </property>
+            <property name="value">
+             <number>1024</number>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="1">
+           <widget class="QProgressBar" name="progressBootloader">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="value">
+             <number>100</number>
+            </property>
+            <property name="textVisible">
+             <bool>true</bool>
+            </property>
+            <property name="invertedAppearance">
+             <bool>false</bool>
+            </property>
+            <property name="format">
+             <string>No app being installed</string>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="1">
+           <layout class="QHBoxLayout" name="horizontalLayout_7">
+            <item>
+             <widget class="QPushButton" name="pushBootReboot">
+              <property name="toolTip">
+               <string>Reboots the target module</string>
+              </property>
+              <property name="text">
+               <string>Reb&amp;oot</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_4">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushBootRemoveAll">
+              <property name="toolTip">
+               <string>Uninstalls all the apps from the target module</string>
+              </property>
+              <property name="text">
+               <string>Remove &amp;all</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushBootRemoveLast">
+              <property name="toolTip">
+               <string>Uninstalls the last app from the target module</string>
+              </property>
+              <property name="text">
+               <string>Remo&amp;ve last</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushInstall">
+              <property name="toolTip">
+               <string>Installs the app configured in the form above</string>
+              </property>
+              <property name="text">
+               <string>&amp;Install</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="label_4">
+            <property name="text">
+             <string>Module ELF</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="label_5">
+            <property name="text">
+             <string>App src ELF</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <layout class="QHBoxLayout" name="horizontalLayout_9">
+            <item>
+             <widget class="QLineEdit" name="lineModuleElf">
+              <property name="toolTip">
+               <string>Path of the target module firmware ELF</string>
+              </property>
+              <property name="placeholderText">
+               <string notr="true">/opt/r2p/modules/MyModule/build/MyModule.elf</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushModuleElf">
+              <property name="text">
+               <string>...</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="3" column="1">
+           <layout class="QHBoxLayout" name="horizontalLayout_10">
+            <item>
+             <widget class="QLineEdit" name="lineAppSrcElf">
+              <property name="toolTip">
+               <string>Path of the app source (unlinked) ELF</string>
+              </property>
+              <property name="placeholderText">
+               <string>/opt/r2p/apps/MyApp/build/MyApp.elf</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushAppSrcElf">
+              <property name="text">
+               <string>...</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="label_2">
+            <property name="text">
+             <string>App dst ELF</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <layout class="QHBoxLayout" name="horizontalLayout_11">
+            <item>
+             <widget class="QLineEdit" name="lineAppDstElf">
+              <property name="toolTip">
+               <string>Path of the app destination (linked) ELF</string>
+              </property>
+              <property name="placeholderText">
+               <string notr="true">/opt/r2p/apps/MyApp/build/MyApp_linked.elf</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushAppDstElf">
+              <property name="text">
+               <string>...</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabSettings">
+       <attribute name="title">
+        <string>&amp;Settings</string>
+       </attribute>
+       <attribute name="toolTip">
+        <string>Global settings</string>
+       </attribute>
+       <layout class="QFormLayout" name="formLayout">
+        <property name="fieldGrowthPolicy">
+         <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
+        </property>
+        <item row="0" column="0">
+         <widget class="QLabel" name="labelR2pPath">
+          <property name="text">
+           <string>R2P path</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout">
+          <item>
+           <widget class="QLineEdit" name="lineR2pPath">
+            <property name="toolTip">
+             <string>Path of the R2P root folder</string>
+            </property>
+            <property name="placeholderText">
+             <string notr="true">/opt/r2p</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushR2pPath">
+            <property name="text">
+             <string notr="true">...</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="1" column="0">
+         <widget class="QLabel" name="labelChibiosPath">
+          <property name="text">
+           <string>ChibiOS/RT path</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout_3">
+          <item>
+           <widget class="QLineEdit" name="lineChibiosPath">
+            <property name="toolTip">
+             <string>Path of the ChibiOS/RT root folder</string>
+            </property>
+            <property name="placeholderText">
+             <string notr="true">/opt/chibios</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushChibiosPath">
+            <property name="text">
+             <string notr="true">...</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="labelTransport">
+          <property name="text">
+           <string>Transport</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QComboBox" name="comboTransport">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="toolTip">
+           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Gateway transport&lt;/p&gt;&lt;p&gt;&lt;br/&gt;&lt;/p&gt;&lt;p&gt;{TODO; current: DebugTransport(&amp;quot;/dev/ttyUSB0&amp;quot;, 115200)}&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="1">
+         <widget class="QWidget" name="widgetTransportOptions" native="true">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QStatusBar" name="statusBar"/>
+ </widget>
+ <layoutdefault spacing="6" margin="11"/>
+ <tabstops>
+  <tabstop>tabWidget</tabstop>
+  <tabstop>lineBootTopic</tabstop>
+  <tabstop>pushBootRefresh</tabstop>
+  <tabstop>tableApps</tabstop>
+  <tabstop>lineAppPath</tabstop>
+  <tabstop>pushAppPath</tabstop>
+  <tabstop>lineAppName</tabstop>
+  <tabstop>spinStackSize</tabstop>
+  <tabstop>lineR2pPath</tabstop>
+  <tabstop>pushR2pPath</tabstop>
+  <tabstop>lineChibiosPath</tabstop>
+  <tabstop>pushChibiosPath</tabstop>
+  <tabstop>comboTransport</tabstop>
+  <tabstop>pushPhysicalExpand</tabstop>
+  <tabstop>treePhysical</tabstop>
+  <tabstop>pushPhysicalRefresh</tabstop>
+  <tabstop>pushPhysicalCollapse</tabstop>
+ </tabstops>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>pushPhysicalCollapse</sender>
+   <signal>clicked()</signal>
+   <receiver>treePhysical</receiver>
+   <slot>collapseAll()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>75</x>
+     <y>63</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>98</x>
+     <y>158</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushPhysicalExpand</sender>
+   <signal>clicked()</signal>
+   <receiver>treePhysical</receiver>
+   <slot>expandAll()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>153</x>
+     <y>73</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>181</x>
+     <y>108</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushBootRefresh</sender>
+   <signal>clicked()</signal>
+   <receiver>window</receiver>
+   <slot>bootRefreshApps()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>598</x>
+     <y>59</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>639</x>
+     <y>59</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushBootRemoveAll</sender>
+   <signal>clicked()</signal>
+   <receiver>window</receiver>
+   <slot>bootRemoveAll()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>460</x>
+     <y>455</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>419</x>
+     <y>453</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushBootRemoveLast</sender>
+   <signal>clicked()</signal>
+   <receiver>window</receiver>
+   <slot>bootRemoveLast()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>557</x>
+     <y>455</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>528</x>
+     <y>455</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushInstall</sender>
+   <signal>clicked()</signal>
+   <receiver>window</receiver>
+   <slot>bootInstall()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>592</x>
+     <y>445</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>596</x>
+     <y>479</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushBootReboot</sender>
+   <signal>clicked()</signal>
+   <receiver>window</receiver>
+   <slot>bootReboot()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>161</x>
+     <y>455</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>123</x>
+     <y>455</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushAppPath</sender>
+   <signal>clicked()</signal>
+   <receiver>window</receiver>
+   <slot>bootChooseAppPath()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>617</x>
+     <y>259</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>634</x>
+     <y>246</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushR2pPath</sender>
+   <signal>clicked()</signal>
+   <receiver>window</receiver>
+   <slot>settingsChooseR2pPath()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>606</x>
+     <y>62</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>636</x>
+     <y>51</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushChibiosPath</sender>
+   <signal>clicked()</signal>
+   <receiver>window</receiver>
+   <slot>settingsChooseChibiosPath()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>603</x>
+     <y>101</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>637</x>
+     <y>97</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushModulePath</sender>
+   <signal>clicked()</signal>
+   <receiver>window</receiver>
+   <slot>bootChooseModulePath()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>602</x>
+     <y>189</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>637</x>
+     <y>175</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushLogicalExpand</sender>
+   <signal>clicked()</signal>
+   <receiver>treeLogical</receiver>
+   <slot>expandAll()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>164</x>
+     <y>62</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>177</x>
+     <y>141</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushLogicalCollapse</sender>
+   <signal>clicked()</signal>
+   <receiver>treeLogical</receiver>
+   <slot>collapseAll()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>63</x>
+     <y>65</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>61</x>
+     <y>103</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushLogicalRefresh</sender>
+   <signal>clicked()</signal>
+   <receiver>window</receiver>
+   <slot>logicalRefresh()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>586</x>
+     <y>62</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>619</x>
+     <y>5</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushPhysicalRefresh</sender>
+   <signal>clicked()</signal>
+   <receiver>window</receiver>
+   <slot>physicalRefresh()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>585</x>
+     <y>55</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>618</x>
+     <y>0</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushModuleElf</sender>
+   <signal>clicked()</signal>
+   <receiver>window</receiver>
+   <slot>bootChooseModuleElf()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>603</x>
+     <y>218</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>635</x>
+     <y>215</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushAppSrcElf</sender>
+   <signal>clicked()</signal>
+   <receiver>window</receiver>
+   <slot>bootChooseAppSrcElf()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>608</x>
+     <y>281</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>635</x>
+     <y>281</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushAppDstElf</sender>
+   <signal>clicked()</signal>
+   <receiver>window</receiver>
+   <slot>bootChooseAppDstElf()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>603</x>
+     <y>314</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>634</x>
+     <y>317</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>lineAppName</sender>
+   <signal>editingFinished()</signal>
+   <receiver>window</receiver>
+   <slot>bootSetAppName()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>595</x>
+     <y>350</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>634</x>
+     <y>353</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>spinStackSize</sender>
+   <signal>editingFinished()</signal>
+   <receiver>window</receiver>
+   <slot>bootSetStackSize()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>587</x>
+     <y>383</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>639</x>
+     <y>384</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>lineAppDstElf</sender>
+   <signal>editingFinished()</signal>
+   <receiver>window</receiver>
+   <slot>bootSetAppDstElf()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>112</x>
+     <y>315</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>4</x>
+     <y>318</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>lineAppSrcElf</sender>
+   <signal>editingFinished()</signal>
+   <receiver>window</receiver>
+   <slot>bootSetAppSrcElf()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>115</x>
+     <y>279</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>5</x>
+     <y>281</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>lineAppPath</sender>
+   <signal>editingFinished()</signal>
+   <receiver>window</receiver>
+   <slot>bootSetAppPath()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>119</x>
+     <y>246</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>3</x>
+     <y>247</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>lineModuleElf</sender>
+   <signal>editingFinished()</signal>
+   <receiver>window</receiver>
+   <slot>bootSetMouleElf()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>113</x>
+     <y>209</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>6</x>
+     <y>212</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>lineModulePath</sender>
+   <signal>editingFinished()</signal>
+   <receiver>window</receiver>
+   <slot>bootSetModulePath()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>124</x>
+     <y>178</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>4</x>
+     <y>180</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>lineBootTopic</sender>
+   <signal>editingFinished()</signal>
+   <receiver>window</receiver>
+   <slot>bootSetBootTopic()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>93</x>
+     <y>59</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>3</x>
+     <y>62</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>lineR2pPath</sender>
+   <signal>editingFinished()</signal>
+   <receiver>window</receiver>
+   <slot>settingsSetR2pPath()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>136</x>
+     <y>58</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>2</x>
+     <y>60</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>lineChibiosPath</sender>
+   <signal>editingFinished()</signal>
+   <receiver>window</receiver>
+   <slot>settingsSetChibiosPath()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>163</x>
+     <y>89</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>3</x>
+     <y>98</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+ <slots>
+  <slot>bootRemoveAll()</slot>
+  <slot>bootRefreshApps()</slot>
+  <slot>bootRemoveLast()</slot>
+  <slot>bootInstall()</slot>
+  <slot>bootReboot()</slot>
+  <slot>bootChooseAppPath()</slot>
+  <slot>settingsChooseR2pPath()</slot>
+  <slot>settingsChooseChibiosPath()</slot>
+  <slot>bootChooseModulePath()</slot>
+  <slot>logicalRefresh()</slot>
+  <slot>physicalRefresh()</slot>
+  <slot>bootChooseModuleElf()</slot>
+  <slot>bootChooseAppSrcElf()</slot>
+  <slot>bootChooseAppDstElf()</slot>
+  <slot>bootSetAppName()</slot>
+  <slot>bootSetStackSize()</slot>
+  <slot>bootSetBootTopic()</slot>
+  <slot>bootSetAppDstElf()</slot>
+  <slot>bootSetAppSrcElf()</slot>
+  <slot>bootSetAppPath()</slot>
+  <slot>bootSetMouleElf()</slot>
+  <slot>bootSetModulePath()</slot>
+  <slot>settingsSetR2pPath()</slot>
+  <slot>settingsSetChibiosPath()</slot>
+ </slots>
+</ui>
