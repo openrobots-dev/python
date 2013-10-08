@@ -107,24 +107,52 @@ def node3_threadf():
 
 #==============================================================================
 
+def node4_threadf():
+    node = r2p.Node('Node4')
+    node.begin()
+    
+    pub = r2p.LocalPublisher()
+    node.advertise(pub, 'asdf', r2p.Time.ms(500), TestMsg)
+    msg = TestMsg(33, 77)
+    
+    while r2p.ok():
+        #logging.debug('Tick: node4_threadf()')
+        try:
+            node.spin(pub.topic.publish_timeout)
+        except r2p.TimeoutError:
+            pass
+        try:
+            pub.publish(msg)
+            logging.debug('pub4 <<< %s', repr(msg))
+        except IndexError:
+            logging.warning('Publisher of "%s/%s/%s" overpublished' % \
+                            (_mw.module_name, node.name, pub.topic.name))
+    
+    node.end()
+
+#==============================================================================
+
 def _main():
     logging.basicConfig(stream=sys.stderr, level=verbosity2level(int(4)))
     logging.debug('sys.argv = ' + repr(sys.argv))
     
-    dbgtra = r2p.DebugTransport('ttyUSB0', r2p.StdLineIO())
+    #dbgtra = r2p.DebugTransport('ttyUSB0', r2p.StdLineIO())
+    dbgtra = r2p.DebugTransport('ttyUSB0', r2p.SerialLineIO('/dev/ttyUSB0', 115200))
     
-    node1_thread = threading.Thread(name='node1', target=node1_threadf)
-    node2_thread = threading.Thread(name='node2', target=node2_threadf)
-    node3_thread = threading.Thread(name='node3', target=node3_threadf)
+    node1_thread = threading.Thread(name='Node1', target=node1_threadf)
+    node2_thread = threading.Thread(name='Node2', target=node2_threadf)
+    node3_thread = threading.Thread(name='Node3', target=node3_threadf)
+    node4_thread = threading.Thread(name='Node4', target=node4_threadf)
     
     try:
         _mw.initialize('R2PY', 'BOOT_R2PY')
         
         dbgtra.open()
         
-        node1_thread.start()
+        #node1_thread.start()
         node2_thread.start()
         #node3_thread.start()
+        node4_thread.start()
         
         while r2p.ok():
             time.sleep(1)
@@ -139,6 +167,7 @@ def _main():
         node1_thread.join()
         node2_thread.join()
         #node3_thread.join()
+        node4_thread.join()
         _mw.uninitialize()
         dbgtra.close()
 

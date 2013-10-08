@@ -56,7 +56,7 @@ def _get_section_address(elffile, name):
     for section in elffile.iter_sections():
         if section.name == name:
             return section.header['sh_addr']
-    raise RuntimeError('Section "%s" not found' % name)
+    raise RuntimeError('Section %s not found' % repr(name))
 
 
 def _get_function_address(elffile, name):
@@ -67,7 +67,7 @@ def _get_function_address(elffile, name):
                 if DIE.tag == 'DW_TAG_subprogram' and DIE.attributes['DW_AT_name'].value == name:
                     return int(DIE.attributes['DW_AT_low_pc'].value) + THREAD_PC_OFFSET
             except KeyError: continue
-    raise RuntimeError('Symbol "%s" not found' % name)
+    raise RuntimeError('Symbol %s not found' % repr(name))
 
 
 def _get_symbol_address(elffile, name):
@@ -77,7 +77,7 @@ def _get_symbol_address(elffile, name):
         for symbol in section.iter_symbols():
             if symbol.name == name:
                 return symbol['st_value']
-    raise RuntimeError('Symbol "%s" not found' % name)
+    raise RuntimeError('Symbol %s not found' % repr(name))
 
 
 def _get_variable_address(elffile, name):
@@ -91,7 +91,7 @@ def _get_variable_address(elffile, name):
                     assert value[0] == 3
                     return (value[4] << 24) | (value[3] << 16) | (value[2] << 8) | value[1]
             except KeyError: continue
-    raise RuntimeError('Symbol "%s" not found' % name)
+    raise RuntimeError('Symbol %s not found' % repr(name))
 
 
 def _get_variable_size(elffile, name):
@@ -106,7 +106,7 @@ def _get_variable_size(elffile, name):
             except KeyError: continue
         else: continue
         break
-    else: raise RuntimeError('Symbol "%s" not found' % name)
+    else: raise RuntimeError('Symbol %s not found' % repr(name))
     
     for DIE in CU.iter_DIEs():
         try:
@@ -130,7 +130,7 @@ def _get_variable_size(elffile, name):
                 size = DIE.attributes['DW_AT_byte_size'].value
                 break
         except KeyError: continue
-    else: raise RuntimeError('Cannot find structure type of variable "%s"' % name)
+    else: raise RuntimeError('Cannot find structure type of variable %s' % repr(name))
     
     return size
 
@@ -478,11 +478,11 @@ class IhexRecord(Serializable):
     
     
     def parse_ihex(self, entry):
-        if entry[0] != ':': raise ValueError("Entry '%s' does not start with ':'" % entry)
+        if entry[0] != ':': raise ValueError("Entry %s does not start with ':'" % repr(entry))
         self.count = int(entry[1:3], 16)
         explen = 1 + 2 * (1 + 2 + 1 + self.count + 1)
         if len(entry) < explen:
-            raise ValueError("len('%s') < %d" % (entry, explen))
+            raise ValueError("len(%s) < %d" % (repr(entry), explen))
         self.offset = int(entry[3:7], 16)
         self.type = int(entry[7:9], 16)
         entry = entry[9:]
@@ -496,7 +496,7 @@ class IhexRecord(Serializable):
 class Message(Serializable):
     
     def __init__(self):
-        super(Message, self).__init__(self)
+        super(Message, self).__init__()
 
 #==============================================================================
 
@@ -560,7 +560,7 @@ class BootMsg(Message):
         def __repr__(self):
             e = self.TypeEnum
             if   self.type == e.NONE:       value = 'empty'
-            elif self.type == e.TEXT:       value = 'text="%s"' % self.text
+            elif self.type == e.TEXT:       value = 'text=%s' % repr(self.text)
             elif self.type == e.INTEGRAL:   value = 'integral=%d' % self.integral
             elif self.type == e.UINTEGRAL:  value = 'uintegral=%d' % self.uintegral
             elif self.type == e.ADDRESS:    value = 'address=0x%0.8X' % self.address
@@ -877,7 +877,7 @@ class BootMsg(Message):
     def unmarshal(self, data, offset=0):
         self.clean()
         if len(data) < self.MAX_LENGTH:
-            raise ValueError("len('%s')=%d < %d" % (data, len(data), self.MAX_LENGTH))
+            raise ValueError("len(%s)=%d < %d" % (repr(data), len(data), self.MAX_LENGTH))
         payload, t = struct.unpack_from('<%dsB' % self.MAX_PAYLOAD_LENGTH, data, offset)
         
         e = BootMsg.TypeEnum
@@ -1342,18 +1342,18 @@ class Node(object):
         
         
     def begin(self):
-        logging.debug('Starting Node "%s"' % self.name)
+        logging.debug('Starting Node %s' % repr(self.name))
         Middleware.instance().add_node(self)
         
         
     def end(self):
-        logging.debug('Terminating Node "%s"' % self.name)
+        logging.debug('Terminating Node %s' % repr(self.name))
         Middleware.instance().confirm_stop(self)
         
         
     def advertise(self, pub, topic_name, publish_timeout, msg_type):
-        logging.debug('Node "%s" advertising "%s", msg_type=%s, timeout=%s' % \
-                      (self.name, topic_name, msg_type.__name__, repr(publish_timeout)))
+        logging.debug('Node %s advertising %s, msg_type=%s, timeout=%s' % \
+                      (repr(self.name), repr(topic_name), msg_type.__name__, repr(publish_timeout)))
         with self._publishers_lock:
             mw = Middleware.instance()
             mw.advertise_local(pub, topic_name, publish_timeout, msg_type)
@@ -1363,8 +1363,8 @@ class Node(object):
         
         
     def subscribe(self, sub, topic_name, msg_type):
-        logging.debug('Node "%s" subscribing "%s", msg_type=%s' % \
-                      (self.name, topic_name, msg_type.__name__))
+        logging.debug('Node %s subscribing %s, msg_type=%s' % \
+                      (repr(self.name), repr(topic_name), msg_type.__name__))
         with self._subscribers_lock:
             mw = Middleware.instance()
             mw.subscribe_local(sub, topic_name, msg_type)
@@ -1498,17 +1498,13 @@ class Transport(object):
     
     
     def _advertise_cb(self, topic, raw_params):
-        with self._subscribers_lock:
-            if len(self.local_subscribers) == 0:
-                return
-        self.touch_publisher(topic_name)
+        if topic.has_local_subscribers():
+            self.touch_publisher(topic_name)
     
     
     def _subscribe_cb(self, topic, queue_length):
-        with self._publishers_lock:
-            if len(self.local_publishers) == 0:
-                return
-        self.touch_subscriber(topic, queue_length)
+        if topic.has_local_publishers():
+            self.touch_subscriber(topic, queue_length)
     
     
     def advertise(self, pub, topic_name, publish_timeout, msg_type):
@@ -1619,7 +1615,7 @@ class Middleware(object):
             assert is_topic_name(bootloader_name)
             self.boot_topic.name = self.bootloader_name
         
-        logging.info('Initializing middleware "%s"' % self.module_name)
+        logging.info('Initializing middleware %s' % repr(self.module_name))
         
         self.add_topic(self.boot_topic)
         self.add_topic(self.mgmt_topic)
@@ -1637,7 +1633,7 @@ class Middleware(object):
     
     
     def uninitialize(self):
-        logging.info('Uninitializing middleware "%s"' % self.module_name)
+        logging.info('Uninitializing middleware %s' % repr(self.module_name))
         self.stop()
         pass # TODO
     
@@ -1650,7 +1646,7 @@ class Middleware(object):
 
             
     def stop(self):
-        logging.info('Stopping middleware "%s"' % self.module_name)
+        logging.info('Stopping middleware %s' % repr(self.module_name))
         trigger = False
         with _sys_lock:
             if not self.stopped:
@@ -1679,17 +1675,17 @@ class Middleware(object):
             
         
     def add_node(self, node):
-        logging.debug('Adding node "%s"' % node.name)
+        logging.debug('Adding node %s' % repr(node.name))
         with self._nodes_lock:
             for existing in self.nodes:
                 if node is existing or node.name == existing.name:
-                    raise KeyError('Node "%s" already exists' % node.name)
+                    raise KeyError('Node %s already exists' % repr(node.name))
             self.num_running_nodes += 1
             self.nodes.append(node)
         
         
     def add_transport(self, transport):
-        logging.debug('Adding transport "%s"' % transport.name)
+        logging.debug('Adding transport %s' % repr(transport.name))
         with self._transports_lock:
             for existing in self.transports:
                 if transport is existing:
@@ -1698,11 +1694,11 @@ class Middleware(object):
             
         
     def add_topic(self, topic):
-        logging.debug('Adding topic "%s"' % topic.name)
+        logging.debug('Adding topic %s' % repr(topic.name))
         with self._topics_lock:
             for existing in self.topics:
                 if topic is existing or topic.name == existing.name:
-                    raise KeyError('Topic "%s" already exists' % topic.name)
+                    raise KeyError('Topic %s already exists' % repr(topic.name))
             self.topics.append(topic)
         
         
@@ -1748,14 +1744,14 @@ class Middleware(object):
 
 
     def confirm_stop(self, node):
-        logging.debug('Node "%s" halted' % node.name)
+        logging.debug('Node %s halted' % repr(node.name))
         with self._nodes_lock:
             assert self.num_running_nodes > 0
             for existing in self.nodes:
                 if node is existing:
                     break
             else:
-                raise KeyError('Node "%s" not registered' % node.name)
+                raise KeyError('Node %s not registered' % repr(node.name))
             self.num_running_nodes -= 1
             self.nodes = [ existing for existing in self.nodes if node is not existing ]
 
@@ -1789,23 +1785,23 @@ class Middleware(object):
 
     def mgmt_cb(self, msg):
         if msg.type == MgmtMsg.TypeEnum.CMD_ADVERTISE:
-            logging.debug('CMD_ADVERTISE')
+            logging.debug('CMD_ADVERTISE: %s' % repr(msg))
             topic = self.find_topic(msg.pubsub.topic)
             
             if topic is not None and topic.has_local_subscribers():
                 msg.pubsub.transport.notify_subscription_request(topic)
         
         if msg.type == MgmtMsg.TypeEnum.CMD_SUBSCRIBE_REQUEST:
-            logging.debug('CMD_SUBSCRIBE_REQUEST')
+            logging.debug('CMD_SUBSCRIBE_REQUEST: %s' % repr(msg))
             topic = self.find_topic(msg.pubsub.topic)
             
             if topic is not None and topic.has_local_publishers():
                 transport = msg.pubsub.transport
-                transport._subscribe_cb(topic, queue_length)
+                transport._subscribe_cb(topic, msg.pubsub.queue_length)
                 transport.notify_subscription_response(topic)
         
         if msg.type == MgmtMsg.TypeEnum.CMD_SUBSCRIBE_RESPONSE:
-            logging.debug('CMD_SUBSCRIBE_REPLY')
+            logging.debug('CMD_SUBSCRIBE_REPLY: %s' % repr(msg))
             topic = self.find_topic(msg.pubsub.topic)
             transport = msg.pubsub.transport
             transport._advertise_cb(topic, msg.pubsub.raw_params) 
@@ -1850,58 +1846,70 @@ class LineIO(object):
         raise NotImplementedError()
     
     
-    def readln(self):
+    def readline(self):
         raise NotImplementedError()
         # return line
     
     
-    def writeln(self, line):
+    def writeline(self, line):
         raise NotImplementedError()
         
 #==============================================================================
 
 class SerialLineIO(LineIO):
     
-    def __init__(self, dev_path, baud):
+    def __init__(self, dev_path, baud_rate):
         super(SerialLineIO, self).__init__()
-        self._ser = None
         self._dev_path = dev_path
-        self._baud = baud
+        self._baud = baud_rate
+        self._ser = None
+        self._ti = None
+        self._to = None
+        self._tmp_in = ''
         self._read_lock = threading.Lock()
         self._write_lock = threading.Lock()
     
     
     def __repr__(self):
-        return '%s(dev_path=%s, baud=%d)' % (type(self).__name__, repr(self._dev_path), self._baud)
+        return '%s(dev_path=%s, baud_rate=%d)' % (type(self).__name__, repr(self._dev_path), self._baud)
         
     
     def open(self):
         if self._ser is None:
-            self._ser = serial.Serial(port = self._dev_path, baud = self._baud, timeout = 3)
+            self._ser = serial.Serial(port = self._dev_path, baudrate = self._baud, timeout = 3)
+            self._ti = io.TextIOWrapper(buffer = io.BufferedReader(self._ser, 1), encoding = 'ascii', newline = '\r\n')
+            self._to = io.TextIOWrapper(buffer = io.BufferedWriter(self._ser), encoding = 'ascii', newline = '\r\n')
     
         
     def close(self):
         if self._ser is not None:
             self._ser.close()
             self._ser = None
+        self._ti = None
+        self._to = None
     
     
-    def readln(self):
-        with self._read_lock:
-            line = self._ser.readline(None, '\r\n')
-            if line[-2:] != '\r\n':
-                raise TimeoutError()
-            line = line[:-2]
-        logging.debug("%s >>> '%s'" % (self._dev_path, line))
+    def readline(self):
+        while True:
+            with self._read_lock:
+                try:
+                    line = str(self._ti.readline())
+                except:
+                    continue
+                self._tmp_in += line
+                if self._tmp_in[-2:] == '\r\n':
+                    line = self._tmp_in[:-2]
+                    self._tmp_in = ''
+                    break
+        logging.debug("%s >>> %s" % (self._dev_path, repr(line)))
         return line
     
     
-    def writeln(self, line):
-        logging.debug("%s <<< '%s'" % (self._dev_path, line))
+    def writeline(self, line):
+        logging.debug("%s <<< %s" % (self._dev_path, repr(line)))
         with self._write_lock:
-            self._ser.write(line);
-            self._ser.write('\r\n')
-            self._ser.flush()
+            self._to.write(unicode(line))
+            self._to.write(u'\n')
     
 #==============================================================================
     
@@ -1925,16 +1933,16 @@ class StdLineIO(LineIO):
         pass
     
     
-    def readln(self):
+    def readline(self):
         with self._read_lock:
             line = raw_input()
-            logging.debug("stdin >>> '%s'" % line)
+            logging.debug("stdin >>> %s" % repr(line))
         return line
     
     
-    def writeln(self, line):
+    def writeline(self, line):
         with self._write_lock:
-            logging.debug("stdout <<< '%s'" % line)
+            logging.debug("stdout <<< %s" % repr(line))
             print line
 
 #==============================================================================
@@ -1965,14 +1973,14 @@ class TCPLineIO(LineIO):
         self._fp = None
     
     
-    def readln(self):
+    def readline(self):
         line = self._fp.readline().rstrip('\r\n')
-        logging.debug("%s:%d >>> '%s'" % (self._address, self._port, line))
+        logging.debug("%s:%d >>> %s" % (self._address, self._port, repr(line)))
         return line
     
     
-    def writeln(self, line):
-        logging.debug("%s:%d <<< '%s'" % (self._address, self._port, line))
+    def writeline(self, line):
+        logging.debug("%s:%d <<< %s" % (self._address, self._port, repr(line)))
         self._fp.write(line)
         self._fp.write('\r\n')
         self._fp.flush()
@@ -2030,22 +2038,22 @@ class DebugTransport(Transport):
             assert length >= 0
             endx = self._offset + length
             if self._linelen < endx:
-                raise ParserError("Expected %d chars at '%s'[%d:%d] == '%s' (%d chars less)" %
-                                  (length, self._line, self._offset, endx,
-                                   self._line[self._offset : endx], endx - self._linelen))
+                raise ParserError("Expected %d chars at %s[%d:%d] == %s (%d chars less)" %
+                                  (length, repr(self._line), self._offset, endx,
+                                   repr(self._line[self._offset : endx]), endx - self._linelen))
         
         def check_eol(self):
             assert self._linelen >= self._offset
             if self._linelen > self._offset:
-                raise ParserError("Expected end of line at '%s'[%d:] == '%s' (%d chars more)" %
-                                  (self._line, self._offset, self._line[self._offset:],
+                raise ParserError("Expected end of line at %s[%d:] == %s (%d chars more)" %
+                                  (repr(self._line), self._offset, repr(self._line[self._offset:]),
                                    self._linelen - self._offset))
         
         def expect_char(self, c): 
             self._check_length(1)
             if self._line[self._offset] != c:
-                raise ParserError("Expected '%s' at '%s'[%d] == '%s'" %
-                                  (c, self._line, self._offset, self._line[self._offset]))
+                raise ParserError("Expected %s at %s[%d] == %s" %
+                                  (repr(c), repr(self._line), self._offset, repr(self._line[self._offset])))
             self._offset += 1
         
         def read_char(self):
@@ -2055,15 +2063,18 @@ class DebugTransport(Transport):
             return c
         
         def skip_after_char(self, c):
-            while self.read_char() != c:
-                pass
+            try:
+                while self.read_char() != c:
+                    pass
+            except ParserError:
+                raise ParserError("Expected %s in %s" % (repr(c), repr(self._line)))
         
         def read_hexb(self):
             self._check_length(2)
             off = self._offset
             try: b = int(self._line[off : off + 2], 16)
-            except: raise ParserError("Expected hex byte at '%s'[%d:%d] == '%s'" %
-                                      (self._line, off, off + 2, self._line[off : off + 2]))
+            except: raise ParserError("Expected hex byte at %s[%d:%d] == %s" %
+                                      (repr(self._line), off, off + 2, repr(self._line[off : off + 2])))
             self._offset += 2
             return b
         
@@ -2106,37 +2117,37 @@ class DebugTransport(Transport):
     def open(self):
         with self._running_lock:
             if not self._running:
-                logging.info('Opening transport %s(name="%s")' % (type(self).__name__, self.name))
+                logging.info('Opening %s' % repr(self))
                 self._running = True
                 self._lineio.open()
-                self._lineio.writeln('')
-                self._lineio.writeln('')
-                self._lineio.writeln('')
+                self._lineio.writeline('')
+                self._lineio.writeline('')
+                self._lineio.writeline('')
                 self._rx_thread = threading.Thread(name=(self.name + "_RX"), target=self._rx_threadf)
                 self._tx_thread = threading.Thread(name=(self.name + "_TX"), target=self._tx_threadf)
                 self._rx_thread.start()
                 self._tx_thread.start()
                 self.advertise(self._mgmt_rpub, 'R2P', Time.ms(200), MgmtMsg) #  TODO: configure
                 self.subscribe(self._mgmt_rsub, 'R2P', MgmtMsg) #  TODO: configure
-                logging.info('Transport %s(name="%s") open' % (type(self).__name__, self.name))
+                logging.info('%s open' % repr(self))
                 Middleware.instance().add_transport(self)
             else:
-                raise RuntimeError('Transport %s(name="%s") already open' % (type(self).__name__, self.name))
+                raise RuntimeError('%s already open' % repr(self))
     
         
     def close(self):
         with self._running_lock:
             if self._running:
-                logging.info('Closing transport %s(name="%s")' % (type(self).__name__, self.name))
+                logging.info('Closing %s' % repr(self))
                 self._running = False
                 self._rx_thread.join()
                 self._tx_thread.join()
                 self._rx_thread = None
                 self._tx_thread = None
                 self._lineio.close()
-                logging.info('Transport %s(name="%s") closed' % (type(self).__name__, self.name))
+                logging.info('%s closed' % repr(self))
             else:
-                raise RuntimeError('Transport %s(name="%s") already closed' % (type(self).__name__, self.name))
+                raise RuntimeError('%s already closed' % repr(self))
     
     
     def _send_message(self, topic_name, payload):
@@ -2153,7 +2164,7 @@ class DebugTransport(Transport):
                 len(payload), str2hexb(payload),
                 cs.compute_checksum())
         line = '@%.8X:%.2X%s:%.2X%s:%0.2X' % args
-        self._lineio.writeln(line)
+        self._lineio.writeline(line)
     
     
     def _send_advertisement(self, topic):
@@ -2172,7 +2183,7 @@ class DebugTransport(Transport):
                 len(topic_name), topic_name,
                 cs.compute_checksum())
         line = '@%.8X:00:p:%.2X%s:%.2X%s:%0.2X' % args
-        self._lineio.writeln(line)
+        self._lineio.writeline(line)
     
     
     def _send_subscription_request(self, topic):
@@ -2194,7 +2205,7 @@ class DebugTransport(Transport):
                 len(topic_name), topic_name,
                 cs.compute_checksum())
         line = '@%.8X:00:s%.2X:%.2X%s:%.2X%s:%0.2X' % args
-        self._lineio.writeln(line)
+        self._lineio.writeline(line)
     
     
     def _send_subscription_response(self, topic):
@@ -2214,7 +2225,7 @@ class DebugTransport(Transport):
                 len(topic_name), topic_name,
                 cs.compute_checksum())
         line = '@%.8X:00:e:%.2X%s:%.2X%s:%0.2X' % args
-        self._lineio.writeln(line)
+        self._lineio.writeline(line)
     
     
     def _send_stop(self):
@@ -2223,7 +2234,7 @@ class DebugTransport(Transport):
         cs.add_uint(now)
         cs.add_bytes('t')
         line = '@%.8X:00:t:%0.2X' % (now, cs.compute_checksum())
-        self._lineio.writeln(line)
+        self._lineio.writeline(line)
     
     
     def _send_reboot(self):
@@ -2232,7 +2243,7 @@ class DebugTransport(Transport):
         cs.add_uint(now)
         cs.add_bytes('r')
         line = '@%.8X:00:r:%0.2X' % (now, cs.compute_checksum())
-        self._lineio.writeln(line)
+        self._lineio.writeline(line)
     
         
     def _recv(self):
@@ -2242,14 +2253,12 @@ class DebugTransport(Transport):
                 if not self._running:
                     return None
             
-            # Receive the incoming message
-            line = self._lineio.readln()
+            # Start parsing the incoming message
+            line = self._lineio.readline()
             parser = self.MsgParser(line)
-            try:
-                parser.skip_after_char('@')
-                break
-            except ParserError:
-                pass
+            parser.skip_after_char('@')
+            break
+        
         deadline = parser.read_unsigned(4)
         cs.add_uint(deadline)
         
@@ -2357,7 +2366,7 @@ class DebugTransport(Transport):
                 return (Transport.TypeEnum.REBOOT,)
             
             else:
-                raise ValueError("Unknown management message type '%s'" % typechar)
+                raise ValueError("Unknown management message type %s" % repr(typechar))
         
         
     def _create_publisher(self, topic):
@@ -2376,7 +2385,12 @@ class DebugTransport(Transport):
     def _rx_threadf(self):
         try:
             while self._is_running():
-                fields = self._recv()
+                try:
+                    fields = self._recv()
+                except ParserError as e:
+                    logging.debug(str(e))
+                    continue
+                
                 if fields is None:
                     break
                 t = fields[0]
@@ -2437,6 +2451,7 @@ class DebugTransport(Transport):
         
         except Exception as e:
             logging.error(e)
+            raise
     
     
     def _tx_threadf(self):
@@ -2466,7 +2481,7 @@ class BootloaderMaster(object):
     def initialize(self):
         
         # Sync with target board
-        logging.info('Awaiting target bootloader with topic "%s"' % self._pub.topic.name)
+        logging.info('Awaiting target bootloader with topic %s' % repr(self._pub.topic.name))
         try:
             self._alloc_publish(BootMsg.TypeEnum.NACK)
             self._fetch_release(BootMsg.TypeEnum.NACK)
@@ -2592,7 +2607,7 @@ class BootloaderMaster(object):
         self._fetch_release(BootMsg.TypeEnum.ACK)
         
         # Get the length of each section
-        logging.info('Reading section lengths from "%s"' % app_elf_path)
+        logging.info('Reading section lengths from %s' % repr(app_elf_path))
         pgmlen, bsslen, datalen = 0, 0, 0
         with open(app_elf_path, 'rb') as f:
             elffile = ELFFile(f)
@@ -2614,7 +2629,7 @@ class BootloaderMaster(object):
         logging.info('  bsslen   = 0x%0.8X (%d)' % (bsslen, bsslen))
         logging.info('  datalen  = 0x%0.8X (%d)' % (datalen, datalen))
         logging.info('  stacklen = 0x%0.8X (%d)' % (app_stack_size, app_stack_size))
-        logging.info('  appname  = "%s"' % app_name)
+        logging.info('  appname  = %s' % repr(app_name))
         logging.info('  flags    = 0x%0.4X' % appflags)
         
         # Send the section sizes and app name
@@ -2660,13 +2675,13 @@ class BootloaderMaster(object):
         
         logging.info('Linking object files')
         if 0 != subprocess.call(args):
-            raise RuntimeError("Cannot link '%s' with '%s'" % (sys_elf_path, app_elf_path))
+            raise RuntimeError("Cannot link %s with %s" % (repr(sys_elf_path), repr(app_elf_path)))
         
         logging.info('Generating executable')
         if 0 != subprocess.call(['make']):
             raise RuntimeError("Cannot make the application binary")
         
-        logging.info('Reading final ELF file "%s"' % app_elf_path)
+        logging.info('Reading final ELF file %s' % repr(app_elf_path))
         with open(app_elf_path, 'rb') as f:
             elffile = ELFFile(f)
             
@@ -2777,12 +2792,12 @@ class BootloaderMaster(object):
             # Get the linking setup
             self._alloc_publish(BootMsg.TypeEnum.ACK)
             setup = msg = self._fetch(BootMsg.TypeEnum.LINKING_SETUP).linking_setup
-            logging.info('Found app "%s"' % setup.name)
+            logging.info('Found app %s' % repr(setup.name))
             logging.info('  pgmlen     = 0x%0.8X (%d)' % (setup.pgmlen, setup.pgmlen))
             logging.info('  bsslen     = 0x%0.8X (%d)' % (setup.bsslen, setup.bsslen))
             logging.info('  datalen    = 0x%0.8X (%d)' % (setup.datalen, setup.datalen))
             logging.info('  app_stack_size   = 0x%0.8X (%d)' % (setup.app_stack_size, setup.app_stack_size))
-            logging.info('  name       = "%s"' % setup.name)
+            logging.info('  name       = %s' % repr(setup.name))
             logging.info('  flags      = 0x%0.4X' % setup.flags)
             self._release(msg)
             
@@ -2832,7 +2847,7 @@ class BootloaderMaster(object):
         # Send the parameter request
         length = len(value)
         logging.info('Sending parameter request')
-        logging.info('  app_name = "%s"' % app_name)
+        logging.info('  app_name = %s' % repr(app_name))
         logging.info('  offset  = 0x%0.8X (%d)' % (offset, offset))
         logging.info('  length  = 0x%0.8X (%d)' % (length, length))
         
@@ -2883,7 +2898,7 @@ class BootloaderMaster(object):
         
         # Send the parameter request
         logging.info('Sending parameter request')
-        logging.info('  app_name = "%s"' % app_name)
+        logging.info('  app_name = %s' % repr(app_name))
         logging.info('  offset  = 0x%0.8X (%d)' % (offset, offset))
         logging.info('  length  = 0x%0.8X (%d)' % (length, length))
         
