@@ -217,9 +217,21 @@ class Time(object):
     RAW_MAX = (1 << 31) - 1
     RAW_MIN = -(1 << 31)
     
-    def __init__(self, microseconds=0):
+    def __init__(self, microseconds=0, seconds=None):
+        if seconds is not None:
+            microseconds = seconds * 1000000
         self._raw = max(Time.RAW_MIN, min(int(microseconds), Time.RAW_MAX))
     
+    
+    def __repr__(self):
+        assert Time.RAW_MIN <= self._raw <= Time.RAW_MAX
+        if self._raw == Time.RAW_MAX:
+            return 'Time_INFINITE'
+        elif self._raw == Time.RAW_MIN:
+            return 'Time_NINFINITE'
+        else:
+            return 'Time(microseconds=%d, seconds=%f)' % (self._raw, self.to_s())
+        
     
     def to_us(self):
         return self._raw
@@ -406,7 +418,8 @@ class IhexRecord(Serializable):
     
         
     def __repr__(self):
-        return str(self.__dict__)
+        return '%s(count=0x%0.2X, offset=0x%0.4X, type=%d, data=%s, checksum=0x%0.2X)' % \
+               (type(self).__name__, self.count, self.offset, self.type, repr(self.data), self.checksum)
     
         
     def __str__(self):
@@ -554,7 +567,8 @@ class BootMsg(Message):
             elif self.type == e.LENGTH:     value = 'length=0x%0.8X' % self.length
             elif self.type == e.CHUNK:      value = 'chunk(address=%d, length=%d)' % (self.address, self.length)
             else: raise ValueError('Unknown error type %d' % self.type)
-            return 'ErrorInfo(line=%d, reason=%d, %s)' % (self.line, self.reason, value)
+            return '%s(line=%d, reason=%d, type=%d, text=%s, integral=%d, uintegral=%d, address=0x%0.X, length=%d' % \
+                   (type(self).__name__, self.line, self.reason, self.type, repr(self.text), self.integral, self.uintegral, self.address, self.length)
         
         def marshal(self):
             bytes = struct.pack('<HBB', self.line, self.reason, self.type)
@@ -595,6 +609,12 @@ class BootMsg(Message):
             self.stacklen = stacklen
             self.name = name
             self.flags = self.FlagsEnum.ENABLED
+            
+            
+        def __repr__(self):
+            return '%s(pgmlen=0x%0.8X, bsslen=0x%0.8X, datalen=0x%0.8X, stacklen=0x%0.8X, name=%s, flags=0x%0.X)' % \
+                   (type(self).__name__, self.pgmlen, self.bsslen, self.datalen, self.stacklen, repr(self.name), self.flags)
+            
         
         def marshal(self):
             return struct.pack('<LLLL%dsH' % NODE_NAME_MAX_LENGTH, self.pgmlen, self.bsslen,
@@ -615,6 +635,10 @@ class BootMsg(Message):
             self.dataadr = dataadr
             self.datapgmadr = datapgmadr
             self.nextadr = nextadr
+        
+        def __repr__(self):
+            return '%s(infoadr=0x%0.8X, pgmadr=0x%0.8X, bssadr=0x%0.8X, dataadr=0x%0.8X, datapgmadr=0x%0.8X, nextadr=0x%0.8X)' % \
+                   (type(self).__name__, self.infoadr, self.pgmadr, self.bssadr, self.dataadr, self.datapgmadr, self.nextadr)
         
         def marshal(self):
             return struct.pack('<LLLLLL', self.infoadr, self.pgmadr, self.bssadr,
@@ -637,6 +661,10 @@ class BootMsg(Message):
             self.dtorsadr = dtorsadr
             self.dtorslen = dtorslen
             
+        def __repr__(self):
+            return '%s(mainadr=0x%0.8X, cfgadr=0x%0.8X, cfglen=0x%0.8X, ctorsadr=0x%0.8X, ctorslen=0x%0.8X, dtorsadr=0x%0.8X, dtorslen=0x%0.8X)' % \
+                   (type(self).__name__, self.mainadr, self.cfgadr, self.cfglen, self.ctorsadr, self.ctorslen, self.dtorsadr, self.dtorslen)
+            
         def marshal(self):
             return struct.pack('<LLLLLLL', self.mainadr, self.cfgadr, self.cfglen,
                                self.ctorsadr, self.ctorslen, self.dtorsadr, self.dtorslen)
@@ -657,6 +685,10 @@ class BootMsg(Message):
             self.ramstartadr = ramstartadr
             self.ramendadr = ramendadr
         
+        def __repr__(self):
+            return '%s(numapps=%d, freeadr=0x%0.8X, pgmstartadr=0x%0.8X, pgmendadr=0x%0.8X, ramstartadr=0x%0.8X, ramendadr=0x%0.8X)' % \
+                   (type(self).__name__, self.numapps, self.freeadr, self.pgmstartadr, self.pgmendadr, self.ramstartadr, self.ramendadr)
+        
         def marshal(self):
             return struct.pack('<LLLLLL', self.numapps, self.freeadr,
                                self.pgmstartadr, self.pgmendadr,
@@ -675,6 +707,10 @@ class BootMsg(Message):
             self.appname = appname
             self.length = length
         
+        def __repr__(self):
+            return '%s(offset=0x%0.8X, appname=%s, length=0x%0.8X)' % \
+                   (type(self).__name__, self.offset, repr(self.appname), self.length)
+        
         def marshal(self):
             return struct.pack('<L%dsB' % NODE_NAME_MAX_LENGTH,
                                self.offset, self.appname, self.length)
@@ -691,7 +727,10 @@ class BootMsg(Message):
         def __init__(self, data=''):
             super(BootMsg.ParamChunk, self).__init__()
             self.data = data
-            
+        
+        def __repr__(self):
+            return '%s(data=%s)' % (type(self).__name__, repr(self.data))
+        
         def marshal(self):
             assert len(self.data) <= self.MAX_DATA_LENGTH
             return self.data
@@ -730,11 +769,19 @@ class BootMsg(Message):
     
     
     def __repr__(self):
-        return str(self)
-        
-        
-    def __str__(self):
-        return str2hexb(self.marshal())
+        subtext = ''
+        t = self.type
+        e = BootMsg.TypeEnum
+        if   t == e.NACK:               subtext = ', error_info=' + repr(self.error_info)
+        elif t == e.LINKING_SETUP:      subtext = ', linking_setup=' + repr(self.linking_setup)
+        elif t == e.LINKING_ADDRESSES:  subtext = ', linking_addresses=' + repr(self.linking_addresses)
+        elif t == e.LINKING_OUTCOME:    subtext = ', linking_outcome=' + repr(self.linking_outcome)
+        elif t == e.IHEX_RECORD:        subtext = ', ihex_record=' + repr(self.ihex_record)
+        elif t == e.APPINFO_SUMMARY:    subtext = ', appinfo_summary=' + repr(self.appinfo_summary)
+        elif t == e.PARAM_REQUEST:      subtext = ', param_request=' + repr(self.param_request)
+        elif t == e.PARAM_CHUNK:        subtext = ', param_chunk=' + repr(self.param_chunk)
+        else: raise ValueError('Unknown bootloader message subtype %d' % t)
+        return '%s(type=%d%s)' % (type(self).__name__, self.type, subtext)
     
     
     def check_type(self, type):
@@ -877,6 +924,10 @@ class MgmtMsg(Message):
             self.node = node
             self.topic = topic
         
+        def __repr__(self):
+            return '%s(MgmtMsg, module=%s, node=%s, topic=%s)' % \
+                   (type(self).__name__, repr(self.module), repr(self.node), repr(self.topic))
+        
         def marshal(self):
             lengths = (MODULE_NAME_MAX_LENGTH, NODE_NAME_MAX_LENGTH, TOPIC_NAME_MAX_LENGTH)
             return struct.pack('<%ds%ds%ds' % lengths, self.module, self.node, self.topic)
@@ -895,6 +946,11 @@ class MgmtMsg(Message):
             self.transport = transport
             self.queue_length = queue_length
             self.raw_params = raw_params
+        
+        def __repr__(self):
+            tn = self.transport.name if self.transport is not None else 'None'
+            return '%s(MgmtMsg, topic=%s, transport=<%s>, queue_length=%d, raw_params=%s)' % \
+                   (type(self).__name__, repr(self.topic), tn, self.queue_length, repr(self.raw_params))
         
         def marshal(self):
             return struct.pack('<%dsB%dsL' % (_MgmtMsg.MAX_PAYLOAD_LENGTH, self.MAX_RAW_PARAMS_LENGTH),
@@ -915,6 +971,9 @@ class MgmtMsg(Message):
             def __int__(self):
                 return int(self.stopped)
             
+            def __repr__(self):
+                return '%s(intval=0x%0.X)' % (type(self).__name__, self.intval)
+            
             def marshal(self):
                 return struct.pack('<B', int(self))
                 
@@ -926,6 +985,9 @@ class MgmtMsg(Message):
             self._MgmtMsg = _MgmtMsg
             self.module = module
             self.flags = flags if flags is not None else self.Flags()
+        
+        def __repr__(self):
+            return '%s(MgmtMsg, module=%s, flags=%s)' % (type(self).__name__, repr(self.module), repr(self.flags))
         
         def marshal(self):
             return struct.pack('<%ds' % MODULE_NAME_MAX_LENGTH, _MODULE_NAME) + self.flags.marshal()
@@ -941,6 +1003,21 @@ class MgmtMsg(Message):
         self.path = MgmtMsg.Path(self)
         self.pubsub = MgmtMsg.PubSub(self)
         self.module = MgmtMsg.Module(self)
+    
+    
+    def __repr__(self):
+        t = self.type
+        e = MgmtMsg.TypeEnum
+        if t in (e.RAW, e.CMD_GET_NETWORK_STATE):
+            subtext = ''
+        if t == e.INFO_MODULE:
+            subtext = ', module=' + repr(self.module)
+        elif t in (e.INFO_ADVERTISEMENT, e.INFO_SUBSCRIPTION):
+            subtext = ', path=' + repr(self.path)
+        elif t in (e.CMD_ADVERTISE, e.CMD_SUBSCRIBE_REQUEST, e.CMD_SUBSCRIBE_RESPONSE):
+            subtext = ', pubsub=' + repr(self.pubsub)
+        else: raise ValueError('Unknown management message subtype %d' % self.type)
+        return '%s(type=%d%s)' % (type(self).__name__, self.type, subtext)
     
     
     def check_type(self, type):
@@ -1001,6 +1078,10 @@ class Topic(object):
         
         self._lock = threading.Lock()
     
+    
+    def __repr__(self):
+        return '%s(name=%s, msg_type=%s, max_queue_length=%d, publish_timeout=%f)' % \
+               (type(self).__name__, repr(self.name), self.msg_type.__name__, self.max_queue_length, self.publish_timeout.to_s())
     
     def get_lock(self):
         return self._lock
@@ -1104,14 +1185,23 @@ class BasePublisher(object):
     
     def __init__(self):
         self.topic = None
+        self._r2p_net_path = '?/?/?'
+
+        
+    def __repr__(self):
+        return '<%s(path=%s)>' % (type(self).__name__, repr(self._r2p_net_path))
 
 
     def has_topic(self, topic_name):
         return self.topic is not None and self.topic.has_name(topic_name)
     
     
-    def notify_advertised(self, topic):
+    def notify_advertised(self, topic, r2p_net_path=None):
         self.topic = topic
+        if r2p_net_path is not None:
+            self._r2p_net_path = r2p_net_path
+        else:
+            self._r2p_net_path = '%s/?/?' % Middleware.instance().module_name
     
     
     def alloc(self):
@@ -1140,6 +1230,11 @@ class BaseSubscriber(object):
     
     def __init__(self):
         self.topic = None
+        self._r2p_net_path = '?/?/?'
+
+        
+    def __repr__(self):
+        return '<%s(path=%s)>' % (type(self).__name__, repr(self._r2p_net_path))
         
         
     def get_queue_length(self):
@@ -1150,8 +1245,12 @@ class BaseSubscriber(object):
         return self.topic is not None and self.topic.has_name(topic_name)
     
     
-    def notify_subscribed(self, topic):
+    def notify_subscribed(self, topic, r2p_net_path=None):
         self.topic = topic
+        if r2p_net_path is not None:
+            self._r2p_net_path = r2p_net_path
+        else:
+            self._r2p_net_path = '%s/?/?' % Middleware.instance().module_name
     
     
     def notify(self, msg, deadline):
@@ -1253,21 +1352,25 @@ class Node(object):
         
         
     def advertise(self, pub, topic_name, publish_timeout, msg_type):
-        logging.debug('Node "%s" advertising "%s", msg_type=%s, timeout=%fs' % \
-                      (self.name, topic_name, msg_type.__name__, publish_timeout))
+        logging.debug('Node "%s" advertising "%s", msg_type=%s, timeout=%s' % \
+                      (self.name, topic_name, msg_type.__name__, repr(publish_timeout)))
         with self._publishers_lock:
-            Middleware.instance().advertise_local(pub, topic_name, publish_timeout, msg_type)
+            mw = Middleware.instance()
+            mw.advertise_local(pub, topic_name, publish_timeout, msg_type)
             pub.node = self;
             self.publishers.append(pub)
+            pub._r2p_net_path = '%s/%s/%s' % (mw.module_name, self.name, topic_name)
         
         
     def subscribe(self, sub, topic_name, msg_type):
         logging.debug('Node "%s" subscribing "%s", msg_type=%s' % \
                       (self.name, topic_name, msg_type.__name__))
         with self._subscribers_lock:
-            Middleware.instance().subscribe_local(sub, topic_name, msg_type)
+            mw = Middleware.instance()
+            mw.subscribe_local(sub, topic_name, msg_type)
             sub.node = self
             self.subscribers.append(sub)
+            sub._r2p_net_path = '%s/%s/%s' % (mw.module_name, self.name, topic_name)
         
         
     def publish_publishers(self, info_pub):
@@ -1340,6 +1443,14 @@ class Transport(object):
         self._subscribers_lock = threading.RLock()
         
         
+    def open(self):
+        raise NotImplementedError()
+        
+        
+    def close(self):
+        raise NotImplementedError()
+    
+        
     def notify_advertisement(self, topic):
         self._send_advertisement(topic)
     
@@ -1366,7 +1477,8 @@ class Transport(object):
                 if pub.has_topic(topic.name):
                     return pub
             pub = self._create_publisher(topic)
-            pub.notify_advertised(topic)
+            path = '%s/(%s)/%s' % (Middleware.instance().module_name, self.name, topic.name)
+            pub.notify_advertised(topic, path)
             topic.advertise_remote(pub, Time_INFINITE)
             self.publishers.append(pub)
             return pub
@@ -1378,13 +1490,14 @@ class Transport(object):
                 if sub.has_topic(topic.name):
                     return sub
             sub = self._create_subscriber(topic, queue_length)
-            sub.notify_subscribed(topic)
+            path = '%s/(%s)/%s' % (Middleware.instance().module_name, self.name, topic.name)
+            sub.notify_subscribed(topic, path)
             topic.subscribe_remote(sub)
             self.subscribers.append(sub)
             return sub
     
     
-    def _advertise_cb(self, topic):
+    def _advertise_cb(self, topic, raw_params):
         with self._subscribers_lock:
             if len(self.local_subscribers) == 0:
                 return
@@ -1594,46 +1707,44 @@ class Middleware(object):
         
         
     def advertise_local(self, pub, topic_name, publish_timeout, msg_type):
-        logging.debug('Advertising "%s" to locals; publish_timeout=%f, msg_type=%s' % \
-                      (topic_name, publish_timeout.to_s(), msg_type.__name__))
         with self._topics_lock:
             topic = self.touch_topic(topic_name, msg_type)
             pub.notify_advertised(topic)
             topic.advertise_local(pub, publish_timeout)
+            logging.debug('Advertisement of %s by %s' % (repr(topic), repr(pub)))
         
         for transport in self.transports:
             transport.notify_advertisement(topic)
         
     
     def advertise_remote(self, pub, topic_name, publish_timeout, msg_type):
-        logging.debug('Advertising "%s" to remotes; publish_timeout=%f, msg_type=%s' % \
-                      (topic_name, publish_timeout.to_s(), msg_type.__name__))
         with self._topics_lock:
             topic = self.touch_topic(topic_name, msg_type)
             pub.notify_advertised(topic)
             topic.advertise_remote(pub, publish_timeout)
+            logging.debug('Advertisement of %s by %s' % (repr(topic), repr(pub)))
         
         for transport in self.transports:
             transport.notify_advertisement(topic)
         
         
     def subscribe_local(self, sub, topic_name, msg_type):
-        logging.debug('Subscribing "%s" to locals; msg_type=%s' % (topic_name, msg_type.__name__))
         with self._topics_lock:
             topic = self.touch_topic(topic_name, msg_type)
             sub.notify_subscribed(topic)
             topic.subscribe_local(sub)
+            logging.debug('Subscription of %s by %s' % (repr(topic), repr(sub)))
         
         for transport in self.transports:
             transport.notify_subscription_request(topic)
     
     
     def subscribe_remote(self, sub, topic_name, msg_type):
-        logging.debug('Subscribing "%s" to remotes; msg_type=%s' % (topic_name, msg_type.__name__))
         with self._topics_lock:
             topic = self.touch_topic(topic_name, msg_type)
             sub.notify_subscribed(topic)
             topic.subscribe_remote(sub)
+            logging.debug('Subscription of %s by %s' % (repr(topic), repr(sub)))
 
 
     def confirm_stop(self, node):
@@ -1689,15 +1800,15 @@ class Middleware(object):
             topic = self.find_topic(msg.pubsub.topic)
             
             if topic is not None and topic.has_local_publishers():
-                rsub = msg.pubsub.transport.touch_subscriber(topic, msg.pubsub.queue_length)
-                topic.subscribe_remote(rsub)
-                msg.pubsub.transport.notify_subscription_response(topic)
+                transport = msg.pubsub.transport
+                transport._subscribe_cb(topic, queue_length)
+                transport.notify_subscription_response(topic)
         
         if msg.type == MgmtMsg.TypeEnum.CMD_SUBSCRIBE_RESPONSE:
             logging.debug('CMD_SUBSCRIBE_REPLY')
             topic = self.find_topic(msg.pubsub.topic)
-            rpub = msg.pubsub.transport.touch_publisher(topic)
-            topic.advertise_remote(rpub, Time_INFINITE) # FIXME: timeout 
+            transport = msg.pubsub.transport
+            transport._advertise_cb(topic, msg.pubsub.raw_params) 
     
     
     def mgmt_threadf(self, thread):
@@ -1760,6 +1871,10 @@ class SerialLineIO(LineIO):
         self._write_lock = threading.Lock()
     
     
+    def __repr__(self):
+        return '%s(dev_path=%s, baud=%d)' % (type(self).__name__, repr(self._dev_path), self._baud)
+        
+    
     def open(self):
         if self._ser is None:
             self._ser = serial.Serial(port = self._dev_path, baud = self._baud, timeout = 3)
@@ -1798,6 +1913,10 @@ class StdLineIO(LineIO):
         self._write_lock = threading.Lock()
     
     
+    def __repr__(self):
+        return type(self).__name__ + '()'
+    
+    
     def open(self):
         pass
     
@@ -1827,6 +1946,10 @@ class TCPLineIO(LineIO):
         self._fp = None
         self._address = address_string
         self._port = port
+    
+    
+    def __repr__(self):
+        return '%s(address_string=%s, port=%d)' % (type(self).__name__, repr(self._address), self._port)
     
     
     def open(self):
@@ -1974,6 +2097,10 @@ class DebugTransport(Transport):
         self._sub_queue = EventQueue()
         self._running = False
         self._running_lock = threading.Lock()
+    
+    
+    def __repr__(self):
+        return '%s(name=%s, lineio=%s)' % (type(self).__name__, repr(self.name), repr(self._lineio))
     
     
     def open(self):
