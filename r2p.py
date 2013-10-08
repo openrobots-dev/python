@@ -1495,15 +1495,21 @@ class Middleware(object):
         self.stopped = False
         self.num_running_nodes = 0
         
-        self.add_topic(self.boot_topic)
-        self.add_topic(self.mgmt_topic)
-        
         
     def initialize(self, module_name=None, bootloader_name=None):
         if module_name is not None:
             self.module_name = str(module_name)
+            assert is_module_name(module_name)
+        
         if bootloader_name is not None:
             self.bootloader_name = str(bootloader_name)
+            assert is_topic_name(bootloader_name)
+            self.boot_topic.name = self.bootloader_name
+        
+        logging.info('Initializing middleware "%s"' % self.module_name)
+        
+        self.add_topic(self.boot_topic)
+        self.add_topic(self.mgmt_topic)
         
         self.mgmt_boot_thread = threading.Thread(name="R2P_MGMT", target=self.mgmt_threadf, args=(self,))
         self.mgmt_boot_thread.start()
@@ -1518,6 +1524,7 @@ class Middleware(object):
     
     
     def uninitialize(self):
+        logging.info('Uninitializing middleware "%s"' % self.module_name)
         self.stop()
         pass # TODO
     
@@ -1530,6 +1537,7 @@ class Middleware(object):
 
             
     def stop(self):
+        logging.info('Stopping middleware "%s"' % self.module_name)
         trigger = False
         with _sys_lock:
             if not self.stopped:
@@ -1558,6 +1566,7 @@ class Middleware(object):
             
         
     def add_node(self, node):
+        logging.debug('Adding node "%s"' % node.name)
         with self._nodes_lock:
             for existing in self.nodes:
                 if node is existing or node.name == existing.name:
@@ -1567,6 +1576,7 @@ class Middleware(object):
         
         
     def add_transport(self, transport):
+        logging.debug('Adding transport "%s"' % transport.name)
         with self._transports_lock:
             for existing in self.transports:
                 if transport is existing:
@@ -1575,6 +1585,7 @@ class Middleware(object):
             
         
     def add_topic(self, topic):
+        logging.debug('Adding topic "%s"' % topic.name)
         with self._topics_lock:
             for existing in self.topics:
                 if topic is existing or topic.name == existing.name:
@@ -1583,6 +1594,8 @@ class Middleware(object):
         
         
     def advertise_local(self, pub, topic_name, publish_timeout, msg_type):
+        logging.debug('Advertising "%s" to locals; publish_timeout=%f, msg_type=%s' % \
+                      (topic_name, publish_timeout.to_s(), msg_type.__name__))
         with self._topics_lock:
             topic = self.touch_topic(topic_name, msg_type)
             pub.notify_advertised(topic)
@@ -1593,6 +1606,8 @@ class Middleware(object):
         
     
     def advertise_remote(self, pub, topic_name, publish_timeout, msg_type):
+        logging.debug('Advertising "%s" to remotes; publish_timeout=%f, msg_type=%s' % \
+                      (topic_name, publish_timeout.to_s(), msg_type.__name__))
         with self._topics_lock:
             topic = self.touch_topic(topic_name, msg_type)
             pub.notify_advertised(topic)
@@ -1603,6 +1618,7 @@ class Middleware(object):
         
         
     def subscribe_local(self, sub, topic_name, msg_type):
+        logging.debug('Subscribing "%s" to locals; msg_type=%s' % (topic_name, msg_type.__name__))
         with self._topics_lock:
             topic = self.touch_topic(topic_name, msg_type)
             sub.notify_subscribed(topic)
@@ -1613,6 +1629,7 @@ class Middleware(object):
     
     
     def subscribe_remote(self, sub, topic_name, msg_type):
+        logging.debug('Subscribing "%s" to remotes; msg_type=%s' % (topic_name, msg_type.__name__))
         with self._topics_lock:
             topic = self.touch_topic(topic_name, msg_type)
             sub.notify_subscribed(topic)
@@ -1620,6 +1637,7 @@ class Middleware(object):
 
 
     def confirm_stop(self, node):
+        logging.debug('Node "%s" halted' % node.name)
         with self._nodes_lock:
             assert self.num_running_nodes > 0
             for existing in self.nodes:
@@ -1791,45 +1809,50 @@ class StdLineIO(LineIO):
     def readln(self):
         with self._read_lock:
             line = raw_input()
-        logging.debug("stdin <<< '%s'" % line)
+            logging.debug("stdin >>> '%s'" % line)
         return line
     
     
     def writeln(self, line):
-        logging.debug("stdout >>> '%s'" % line)
         with self._write_lock:
+            logging.debug("stdout <<< '%s'" % line)
             print line
 
 #==============================================================================
 
 class TCPLineIO(LineIO):
     
-    def __init__(self, address, port):
-        self.__socket = None
-        self.__fp = None
-        self.__address = address
-        self.__port = port
+    def __init__(self, address_string, port):
+        self._socket = None
+        self._fp = None
+        self._address = address_string
+        self._port = port
+    
     
     def open(self):
-        self.__socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.__socket.connect((self.__address, self.__port))
-        self.__fp = self.__socket.makefile()
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._socket.connect((self._address, self._port))
+        self._fp = self._socket.makefile()
         
         time.sleep(1)
+    
         
     def close(self):
-        self.__socket.close()
-        self.__fp = None
+        self._socket.close()
+        self._fp = None
+    
     
     def readln(self):
-        line = self.__fp.readline().rstrip('\r\n')
-        logging.debug("%s >>> '%s'" % (self.__address, line))
+        line = self._fp.readline().rstrip('\r\n')
+        logging.debug("%s:%d >>> '%s'" % (self._address, self._port, line))
         return line
     
+    
     def writeln(self, line):
-        logging.debug("%s <<< '%s'" % (self.__address, line))
-        self.__fp.write(unicode(line + '\n'))
-        self.__fp.flush()
+        logging.debug("%s:%d <<< '%s'" % (self._address, self._port, line))
+        self._fp.write(line)
+        self._fp.write('\r\n')
+        self._fp.flush()
         
 #==============================================================================
 
@@ -1959,7 +1982,9 @@ class DebugTransport(Transport):
                 logging.info('Opening transport %s(name="%s")' % (type(self).__name__, self.name))
                 self._running = True
                 self._lineio.open()
-                self._lineio.writeln('\n\n')
+                self._lineio.writeln('')
+                self._lineio.writeln('')
+                self._lineio.writeln('')
                 self._rx_thread = threading.Thread(name=(self.name + "_RX"), target=self._rx_threadf)
                 self._tx_thread = threading.Thread(name=(self.name + "_TX"), target=self._tx_threadf)
                 self._rx_thread.start()
@@ -1967,6 +1992,7 @@ class DebugTransport(Transport):
                 self.advertise(self._mgmt_rpub, 'R2P', Time.ms(200), MgmtMsg) #  TODO: configure
                 self.subscribe(self._mgmt_rsub, 'R2P', MgmtMsg) #  TODO: configure
                 logging.info('Transport %s(name="%s") open' % (type(self).__name__, self.name))
+                Middleware.instance().add_transport(self)
             else:
                 raise RuntimeError('Transport %s(name="%s") already open' % (type(self).__name__, self.name))
     
@@ -2006,15 +2032,16 @@ class DebugTransport(Transport):
     def _send_advertisement(self, topic):
         topic_name = topic.name
         assert is_topic_name(topic_name)
-        assert is_module_name(_MODULE_NAME)
+        module_name = Middleware.instance().module_name
+        assert is_module_name(module_name)
         now = int(time.time()) & 0xFFFFFFFF
         cs = Checksummer()
         cs.add_uint(now)
-        cs.add_uint(len(_MODULE_NAME))
-        cs.add_bytes(_MODULE_NAME)
+        cs.add_uint(len(module_name))
+        cs.add_bytes(module_name)
         cs.add_uint(len(topic_name))
         cs.add_bytes(topic_name)
-        args = (now, len(_MODULE_NAME), _MODULE_NAME,
+        args = (now, len(module_name), module_name,
                 len(topic_name), topic_name,
                 cs.compute_checksum())
         line = '@%.8X:00:p:%.2X%s:%.2X%s:%0.2X' % args
@@ -2027,15 +2054,16 @@ class DebugTransport(Transport):
             queue_length = topic.max_queue_length
         assert is_topic_name(topic_name)
         assert 0 < queue_length < 256
-        assert is_module_name(_MODULE_NAME)
+        module_name = Middleware.instance().module_name
+        assert is_module_name(module_name)
         now = int(time.time()) & 0xFFFFFFFF
         cs = Checksummer()
         cs.add_uint(now)
         cs.add_uint(queue_length)
-        cs.add_uint(len(_MODULE_NAME))
-        cs.add_bytes(_MODULE_NAME)
+        cs.add_uint(len(module_name))
+        cs.add_bytes(module_name)
         args = (now, queue_length,
-                len(_MODULE_NAME), _MODULE_NAME,
+                len(module_name), module_name,
                 len(topic_name), topic_name,
                 cs.compute_checksum())
         line = '@%.8X:00:s%.2X:%.2X%s:%.2X%s:%0.2X' % args
@@ -2046,15 +2074,16 @@ class DebugTransport(Transport):
         topic_name = topic.name
         assert is_topic_name(topic_name)
         assert 0 < len(topic_name) < 256
-        assert 0 < len(_MODULE_NAME) <= 7
+        module_name = Middleware.instance().module_name
+        assert 0 < len(module_name) <= 7
         now = int(time.time()) & 0xFFFFFFFF
         cs = Checksummer()
         cs.add_uint(now)
-        cs.add_uint(len(_MODULE_NAME))
-        cs.add_bytes(_MODULE_NAME)
+        cs.add_uint(len(module_name))
+        cs.add_bytes(module_name)
         cs.add_uint(len(topic_name))
         cs.add_bytes(topic_name)
-        args = (now, len(_MODULE_NAME), _MODULE_NAME,
+        args = (now, len(module_name), module_name,
                 len(topic_name), topic_name,
                 cs.compute_checksum())
         line = '@%.8X:00:e:%.2X%s:%.2X%s:%0.2X' % args

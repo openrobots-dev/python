@@ -112,15 +112,16 @@ def _main():
     logging.debug('sys.argv = ' + repr(sys.argv))
     
     dbgtra = r2p.DebugTransport('ttyUSB0', r2p.StdLineIO())
-    _mw.add_transport(dbgtra)
     
     node1_thread = threading.Thread(name='node1', target=node1_threadf)
     node2_thread = threading.Thread(name='node2', target=node2_threadf)
     node3_thread = threading.Thread(name='node3', target=node3_threadf)
     
     try:
+        _mw.initialize('R2PY', 'BOOT_R2PY')
+        
         dbgtra.open()
-        _mw.initialize('DUMMY', 'BOOT_DUMMY')
+        
         node1_thread.start()
         node2_thread.start()
         #node3_thread.start()
