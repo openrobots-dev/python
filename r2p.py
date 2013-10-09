@@ -150,29 +150,36 @@ def ok():
 #==============================================================================
 
 class Checksummer(object):
+    
     def __init__(self):
-        self.__accumulator = 0
+        self._accum = 0
+    
         
     def __int__(self):
         return self.compute_checksum()
+    
         
     def compute_checksum(self):
-        return (0x100 - (self.__accumulator)) & 0xFF
+        return (0x100 - (self._accum)) & 0xFF
+    
     
     def add_uint(self, value):
         value = int(value)
+        assert value >= 0
         while value > 0:
-            self.__accumulator = (self.__accumulator + value) & 0xFF
+            self._accum = (self._accum + (value & 0xFF)) & 0xFF
             value >>= 8
+    
     
     def add_int(self, value, size=4):
         assert size > 0
-        value = int(value) &  (1 << (8 * size)) - 1
-        self.add_uint(value)
+        self.add_uint(int(value) & ((1 << (8 * size)) - 1))
+    
     
     def add_bytes(self, chunk):
-        for b in chunk:
-            self.__accumulator = (self.__accumulator + ord(b)) & 0xFF
+        for b in str(chunk):
+            self._accum = (self._accum + ord(b)) & 0xFF
+            
             
     def check(self, checksum):
         if checksum != self.compute_checksum():
@@ -186,9 +193,11 @@ class Serializable(object):
     def __repr(self):
         return str(self.__dict__)
     
+    
     def marshal(self):
         raise NotImplementedError()
         # return 'data'
+    
     
     def unmarshal(self, data, offset=0):
         raise NotImplementedError()
@@ -214,43 +223,45 @@ class TimeoutError(Exception):
 
 class Time(object):
     
-    RAW_MAX = (1 << 31) - 1
-    RAW_MIN = -(1 << 31)
+    RAW_MAX  =  (1 << 31) - 1
+    RAW_MIN  = -(1 << 31)
+    RAW_MASK =  (1 << 32) - 1
     
-    def __init__(self, microseconds=0, seconds=None):
-        if seconds is not None:
-            microseconds = seconds * 1000000
-        self._raw = max(Time.RAW_MIN, min(int(microseconds), Time.RAW_MAX))
+    
+    def __init__(self, us=0, s=None):
+        if s is not None:
+            us = s * 1000000
+        self.raw = int(us) & self.RAW_MASK
     
     
     def __repr__(self):
-        assert Time.RAW_MIN <= self._raw <= Time.RAW_MAX
-        if self._raw == Time.RAW_MAX:
+        assert Time.RAW_MIN <= self.raw <= Time.RAW_MAX
+        if self.raw == Time.RAW_MAX:
             return 'Time_INFINITE'
-        elif self._raw == Time.RAW_MIN:
+        elif self.raw == Time.RAW_MIN:
             return 'Time_NINFINITE'
         else:
-            return 'Time(microseconds=%d, seconds=%f)' % (self._raw, self.to_s())
+            return 'Time(microseconds=%d, seconds=%f)' % (self.raw, self.to_s())
         
     
     def to_us(self):
-        return self._raw
+        return self.raw
     
     
     def to_ms(self):
-        return self._raw / 1000.0
+        return self.raw / 1000.0
     
     
     def to_s(self):
-        return self._raw / 1000000.0
+        return self.raw / 1000000.0
     
     
     def to_m(self):
-        return self._raw / 60000000.0
+        return self.raw / 60000000.0
     
     
     def to_hz(self):
-        return 1000000.0 / self._raw
+        return 1000000.0 / self.raw
     
     
     @staticmethod
@@ -284,29 +295,29 @@ class Time(object):
 
     
     def __cmp__(self, other):
-        return self._raw.__cmp__(other._raw)
+        return self.raw.__cmp__(other.raw)
         
         
     def __add__(self, other):
-        return Time(self._raw + other._raw)
+        return Time(self.raw + other.raw)
         
         
     def __sub__(self, other):
-        return Time(self._raw - other._raw)
+        return Time(self.raw - other.raw)
         
         
     def __iadd__(self, other):
-        self.__init__(self._raw + other._raw)
+        self.__init__(self.raw + other.raw)
         return self
         
         
     def __isub__(self, other):
-        self.__init__(self._raw - other._raw)
+        self.__init__(self.raw - other.raw)
         return self
         
         
     def __int__(self):
-        return self._raw
+        return self.raw
         
         
     def __float__(self):
@@ -941,7 +952,7 @@ class MgmtMsg(Message):
         def __init__(self, _MgmtMsg, topic='', transport=None, queue_length=0, raw_params=''):
             super(MgmtMsg.PubSub, self).__init__()
             self._MgmtMsg = _MgmtMsg
-            self.MAX_RAW_PARAMS_LENGTH = _MgmtMsg.MAX_PAYLOAD_LENGTH - TOPIC_NAME_MAX_LENGTH - 4 - 1
+            self.MAXraw_PARAMS_LENGTH = _MgmtMsg.MAX_PAYLOAD_LENGTH - TOPIC_NAME_MAX_LENGTH - 4 - 1
             self.topic = topic
             self.transport = transport
             self.queue_length = queue_length
@@ -953,12 +964,12 @@ class MgmtMsg(Message):
                    (type(self).__name__, repr(self.topic), tn, self.queue_length, repr(self.raw_params))
         
         def marshal(self):
-            return struct.pack('<%dsB%dsL' % (_MgmtMsg.MAX_PAYLOAD_LENGTH, self.MAX_RAW_PARAMS_LENGTH),
+            return struct.pack('<%dsB%dsL' % (_MgmtMsg.MAX_PAYLOAD_LENGTH, self.MAXraw_PARAMS_LENGTH),
                                self.topic, self.queue_length, self.raw_params, 0xDEADBEEF)
                                
         def unmarshal(self, data, offset=0):
             self.topic, self.queue_length, self.raw_params, self.transport = \
-                struct.unpack_from('<%dsB%dsL' % (_MgmtMsg.MAX_PAYLOAD_LENGTH, self.MAX_RAW_PARAMS_LENGTH), data, offset)
+                struct.unpack_from('<%dsB%dsL' % (_MgmtMsg.MAX_PAYLOAD_LENGTH, self.MAXraw_PARAMS_LENGTH), data, offset)
     
     
     class Module(Serializable):
@@ -1499,7 +1510,7 @@ class Transport(object):
     
     def _advertise_cb(self, topic, raw_params):
         if topic.has_local_subscribers():
-            self.touch_publisher(topic_name)
+            self.touch_publisher(topic)
     
     
     def _subscribe_cb(self, topic, queue_length):
@@ -2147,14 +2158,14 @@ class DebugTransport(Transport):
     def _send_message(self, topic_name, payload):
         assert is_topic_name(topic_name)
         assert len(payload) < 256
-        now = int(time.time()) & 0xFFFFFFFF
+        now_raw = Time.now().raw
         cs = Checksummer()
-        cs.add_uint(now)
+        cs.add_uint(now_raw)
         cs.add_uint(len(topic_name))
         cs.add_bytes(topic_name)
         cs.add_uint(len(payload))
         cs.add_bytes(payload)
-        args = (now, len(topic_name), topic_name,
+        args = (now_raw, len(topic_name), topic_name,
                 len(payload), str2hexb(payload),
                 cs.compute_checksum())
         line = '@%.8X:%.2X%s:%.2X%s:%0.2X' % args
@@ -2166,16 +2177,16 @@ class DebugTransport(Transport):
         assert is_topic_name(topic_name)
         module_name = Middleware.instance().module_name
         assert is_module_name(module_name)
-        now = int(time.time()) & 0xFFFFFFFF
+        now_raw = Time.now().raw
         cs = Checksummer()
-        cs.add_uint(now)
+        cs.add_uint(now_raw)
         cs.add_uint(0)
         cs.add_bytes('p')
         cs.add_uint(len(module_name))
         cs.add_bytes(module_name)
         cs.add_uint(len(topic_name))
         cs.add_bytes(topic_name)
-        args = (now, len(module_name), module_name,
+        args = (now_raw, len(module_name), module_name,
                 len(topic_name), topic_name,
                 cs.compute_checksum())
         line = '@%.8X:00:p:%.2X%s:%.2X%s:%0.2X' % args
@@ -2190,15 +2201,17 @@ class DebugTransport(Transport):
         assert 0 < queue_length < 256
         module_name = Middleware.instance().module_name
         assert is_module_name(module_name)
-        now = int(time.time()) & 0xFFFFFFFF
+        now_raw = Time.now().raw
         cs = Checksummer()
-        cs.add_uint(now)
+        cs.add_uint(now_raw)
         cs.add_uint(0)
         cs.add_bytes('s')
         cs.add_uint(queue_length)
         cs.add_uint(len(module_name))
         cs.add_bytes(module_name)
-        args = (now, queue_length,
+        cs.add_uint(len(topic_name))
+        cs.add_bytes(topic_name)
+        args = (now_raw, queue_length,
                 len(module_name), module_name,
                 len(topic_name), topic_name,
                 cs.compute_checksum())
@@ -2212,16 +2225,16 @@ class DebugTransport(Transport):
         assert 0 < len(topic_name) < 256
         module_name = Middleware.instance().module_name
         assert 0 < len(module_name) <= 7
-        now = int(time.time()) & 0xFFFFFFFF
+        now_raw = Time.now().raw
         cs = Checksummer()
-        cs.add_uint(now)
+        cs.add_uint(now_raw)
         cs.add_uint(0)
         cs.add_bytes('e')
         cs.add_uint(len(module_name))
         cs.add_bytes(module_name)
         cs.add_uint(len(topic_name))
         cs.add_bytes(topic_name)
-        args = (now, len(module_name), module_name,
+        args = (now_raw, len(module_name), module_name,
                 len(topic_name), topic_name,
                 cs.compute_checksum())
         line = '@%.8X:00:e:%.2X%s:%.2X%s:%0.2X' % args
@@ -2229,20 +2242,20 @@ class DebugTransport(Transport):
     
     
     def _send_stop(self):
-        now = int(time.time()) & 0xFFFFFFFF
+        now_raw = Time.now().raw
         cs = Checksummer()
-        cs.add_uint(now)
+        cs.add_uint(now_raw)
         cs.add_bytes('t')
-        line = '@%.8X:00:t:%0.2X' % (now, cs.compute_checksum())
+        line = '@%.8X:00:t:%0.2X' % (now_raw, cs.compute_checksum())
         self._lineio.writeline(line)
     
     
     def _send_reboot(self):
-        now = int(time.time()) & 0xFFFFFFFF
+        now_raw = Time.now().raw
         cs = Checksummer()
-        cs.add_uint(now)
+        cs.add_uint(now_raw)
         cs.add_bytes('r')
-        line = '@%.8X:00:r:%0.2X' % (now, cs.compute_checksum())
+        line = '@%.8X:00:r:%0.2X' % (now_raw, cs.compute_checksum())
         self._lineio.writeline(line)
     
         
@@ -2261,6 +2274,7 @@ class DebugTransport(Transport):
         
         deadline = parser.read_unsigned(4)
         cs.add_uint(deadline)
+        deadline = Time.us(deadline)
         
         parser.expect_char(':')
         length = parser.read_unsigned(1)

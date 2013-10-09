@@ -24,11 +24,11 @@ class TestMsg(r2p.Message):
     
     
     def marshal(self):
-        return struct.pack('<ll', self.id, self.value)
+        return struct.pack('<LL', self.id, self.value)
         
         
     def unmarshal(self, data, offset=0):
-        self.key, self.value = struct.unpack_from('<ll', data, offset)
+        self.key, self.value = struct.unpack_from('<LL', data, offset)
 
 #==============================================================================
 
@@ -47,8 +47,8 @@ def node1_threadf():
         except r2p.TimeoutError:
             pass
         try:
-            pub.publish(msg)
             logging.debug('pub1 <<< %s', repr(msg))
+            pub.publish(msg)
         except IndexError:
             logging.warning('Publisher of "%s/%s/%s" overpublished' % \
                             (_mw.module_name, node.name, pub.topic.name))
@@ -80,26 +80,24 @@ def node2_threadf():
 
 #==============================================================================
 
+def sub3_cb(msg):
+    logging.debug('sub3 >>> %s', repr(msg))
+
+
 def node3_threadf():
     node = r2p.Node('Node3')
     node.begin()
     
-    pub = r2p.LocalPublisher()
-    node.advertise(pub, 'test', r2p.Time.ms(500), TestMsg)
-    msg = TestMsg(33, 77)
+    sub = r2p.LocalSubscriber(5, sub3_cb)
+    node.subscribe(sub, 'asdf', TestMsg)
+    timeout = r2p.Time.ms(100)
     
     while r2p.ok():
         #logging.debug('Tick: node3_threadf()')
         try:
-            node.spin(pub.topic.publish_timeout)
+            node.spin(timeout)
         except r2p.TimeoutError:
             pass
-        try:
-            pub.publish(msg)
-            logging.debug('pub3 <<< %s', repr(msg))
-        except IndexError:
-            logging.warning('Publisher of "%s/%s/%s" overpublished' % \
-                            (_mw.module_name, node.name, pub.topic.name))
     
     node.end()
 
@@ -121,9 +119,9 @@ def node4_threadf():
             pass
         
         try:
-            pub.publish(msg)
             logging.debug('pub4 <<< %s', repr(msg))
-        except IndexError:
+            pub.publish(msg)
+        except Queue.Full:
             logging.warning('Publisher of "%s/%s/%s" overpublished' % \
                             (_mw.module_name, node.name, pub.topic.name))
     
@@ -149,9 +147,9 @@ def _main():
         dbgtra.open()
         
         #node1_thread.start()
-        #node2_thread.start()
+        node2_thread.start()
         #node3_thread.start()
-        node4_thread.start()
+        #node4_thread.start()
         
         while r2p.ok():
             time.sleep(1)
@@ -163,10 +161,10 @@ def _main():
     finally:
         _mw._stop()
         time.sleep(1)
-        node1_thread.join()
+        #node1_thread.join()
         node2_thread.join()
         #node3_thread.join()
-        node4_thread.join()
+        #node4_thread.join()
         _mw.uninitialize()
         dbgtra.close()
 
