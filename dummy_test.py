@@ -74,8 +74,6 @@ def node2_threadf():
         try:
             node.spin(timeout)
         except r2p.TimeoutError:
-            #logging.warning('Subscriber of "%s/%s/%s" timed out after %fs' % \
-            #                (_mw.module_name, node.name, sub.topic.name, timeout))
             pass
     
     node.end()
@@ -113,7 +111,7 @@ def node4_threadf():
     
     pub = r2p.LocalPublisher()
     node.advertise(pub, 'asdf', r2p.Time.ms(500), TestMsg)
-    msg = TestMsg(33, 77)
+    msg = TestMsg(0xB00B1337, 0xDEADBEEF)
     
     while r2p.ok():
         #logging.debug('Tick: node4_threadf()')
@@ -121,6 +119,7 @@ def node4_threadf():
             node.spin(pub.topic.publish_timeout)
         except r2p.TimeoutError:
             pass
+        
         try:
             pub.publish(msg)
             logging.debug('pub4 <<< %s', repr(msg))
@@ -150,7 +149,7 @@ def _main():
         dbgtra.open()
         
         #node1_thread.start()
-        node2_thread.start()
+        #node2_thread.start()
         #node3_thread.start()
         node4_thread.start()
         

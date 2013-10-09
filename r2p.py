@@ -280,7 +280,7 @@ class Time(object):
     
     @staticmethod
     def now():
-        return Time(time.time() * 1000)
+        return Time(time.time() * 1000000)
 
     
     def __cmp__(self, other):
@@ -1259,7 +1259,7 @@ class BaseSubscriber(object):
     
     def fetch(self):
         raise NotImplementedError()
-        # return (msg, deadline) or throw IndexError
+        # return (msg, deadline)
         
     
     def release(self, msg):
@@ -1288,12 +1288,12 @@ class LocalSubscriber(BaseSubscriber):
     
     
     def notify(self, msg, deadline):
-        self.queue.post((msg, deadline)) # throws IndexError
+        self.queue.post((msg, deadline))
         self.node.notify(self)
     
     
     def fetch(self):
-        return self.queue.fetch() # throws IndexError
+        return self.queue.fetch()
     
 #==============================================================================
 
@@ -1801,7 +1801,7 @@ class Middleware(object):
                 transport.notify_subscription_response(topic)
         
         if msg.type == MgmtMsg.TypeEnum.CMD_SUBSCRIBE_RESPONSE:
-            logging.debug('CMD_SUBSCRIBE_REPLY: %s' % repr(msg))
+            logging.debug('CMD_SUBSCRIBE_RESPONSE: %s' % repr(msg))
             topic = self.find_topic(msg.pubsub.topic)
             transport = msg.pubsub.transport
             transport._advertise_cb(topic, msg.pubsub.raw_params) 
@@ -1820,8 +1820,6 @@ class Middleware(object):
             try:
                 node.spin(Time.ms(1000)) # TODO: configure
             except TimeoutError:
-                pass
-            except IndexError: # FIXME: should not happen..
                 pass
         
         node.end()
@@ -1865,7 +1863,7 @@ class SerialLineIO(LineIO):
         self._ser = None
         self._ti = None
         self._to = None
-        self._tmp_in = ''
+        self._newline = '\r\n'
         self._read_lock = threading.Lock()
         self._write_lock = threading.Lock()
     
@@ -1876,9 +1874,11 @@ class SerialLineIO(LineIO):
     
     def open(self):
         if self._ser is None:
-            self._ser = serial.Serial(port = self._dev_path, baudrate = self._baud, timeout = 3)
-            self._ti = io.TextIOWrapper(buffer = io.BufferedReader(self._ser, 1), encoding = 'ascii', newline = '\r\n')
-            self._to = io.TextIOWrapper(buffer = io.BufferedWriter(self._ser), encoding = 'ascii', newline = '\r\n')
+            self._ser = serial.Serial(port = self._dev_path, baudrate = self._baud, timeout = 1.234)
+            self._ti = io.TextIOWrapper(buffer = io.BufferedReader(self._ser, 1),
+                                        encoding = 'ascii', newline = self._newline)
+            self._to = io.TextIOWrapper(buffer = io.BufferedWriter(self._ser),
+                                        encoding = 'ascii', newline = self._newline)
     
         
     def close(self):
@@ -1890,26 +1890,23 @@ class SerialLineIO(LineIO):
     
     
     def readline(self):
-        while True:
-            with self._read_lock:
-                try:
-                    line = str(self._ti.readline())
-                except:
-                    continue
-                self._tmp_in += line
-                if self._tmp_in[-2:] == '\r\n':
-                    line = self._tmp_in[:-2]
-                    self._tmp_in = ''
+        line = ''
+        with self._read_lock:
+            while True:
+                line += str(self._ti.readline())
+                if line[-2:] == self._newline:
                     break
-        logging.debug("%s >>> %s" % (self._dev_path, repr(line)))
+        line = line[:-2]
+        logging.debug("%s >>> %s" % (repr(self._dev_path), repr(line)))
         return line
     
     
     def writeline(self, line):
-        logging.debug("%s <<< %s" % (self._dev_path, repr(line)))
+        logging.debug("%s <<< %s" % (repr(self._dev_path), repr(line)))
         with self._write_lock:
             self._to.write(unicode(line))
             self._to.write(u'\n')
+            self._to.flush()
     
 #==============================================================================
     
@@ -1975,12 +1972,12 @@ class TCPLineIO(LineIO):
     
     def readline(self):
         line = self._fp.readline().rstrip('\r\n')
-        logging.debug("%s:%d >>> %s" % (self._address, self._port, repr(line)))
+        logging.debug("'%s:%d' >>> %s" % (self._address, self._port, repr(line)))
         return line
     
     
     def writeline(self, line):
-        logging.debug("%s:%d <<< %s" % (self._address, self._port, repr(line)))
+        logging.debug("'%s:%d' <<< %s" % (self._address, self._port, repr(line)))
         self._fp.write(line)
         self._fp.write('\r\n')
         self._fp.flush()
@@ -2009,17 +2006,14 @@ class DebugSubscriber(RemoteSubscriber):
     
     def notify(self, msg, deadline):
         with self._lock:
-            try:
-                self.queue.post((msg, deadline)) # throws IndexError
-                self.transport._sub_queue.signal(self)
-            except IndexError:
-                logging.warning('Notify failed (IndexError)') # FIXME: Sporadic error, but still works...
+            self.queue.post((msg, deadline))
+            self.transport._sub_queue.signal(self)
                 
     
     
     def fetch(self):
         with self._lock:
-            return self.queue.fetch() # throws IndexError
+            return self.queue.fetch()
 
 #==============================================================================
 
@@ -2175,6 +2169,8 @@ class DebugTransport(Transport):
         now = int(time.time()) & 0xFFFFFFFF
         cs = Checksummer()
         cs.add_uint(now)
+        cs.add_uint(0)
+        cs.add_bytes('p')
         cs.add_uint(len(module_name))
         cs.add_bytes(module_name)
         cs.add_uint(len(topic_name))
@@ -2197,6 +2193,8 @@ class DebugTransport(Transport):
         now = int(time.time()) & 0xFFFFFFFF
         cs = Checksummer()
         cs.add_uint(now)
+        cs.add_uint(0)
+        cs.add_bytes('s')
         cs.add_uint(queue_length)
         cs.add_uint(len(module_name))
         cs.add_bytes(module_name)
@@ -2217,6 +2215,8 @@ class DebugTransport(Transport):
         now = int(time.time()) & 0xFFFFFFFF
         cs = Checksummer()
         cs.add_uint(now)
+        cs.add_uint(0)
+        cs.add_bytes('e')
         cs.add_uint(len(module_name))
         cs.add_bytes(module_name)
         cs.add_uint(len(topic_name))
@@ -2552,8 +2552,6 @@ class BootloaderMaster(object):
             try:
                 self._pub.publish_remotely(msg)
                 break
-            except IndexError:
-                pass
             except:
                 self._release(msg)
                 raise
@@ -2564,7 +2562,7 @@ class BootloaderMaster(object):
             try:
                 msg, deadline = self._sub.fetch()
                 break
-            except IndexError:
+            except Queue.Empty:
                 time.sleep(0.100) # TODO: configure
         
         if msg.type == expected_type_id:
