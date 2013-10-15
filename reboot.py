@@ -1,6 +1,6 @@
 #!/usr/bin/env python2
 
-import sys, os
+import sys, os, time
 import logging
 import argparse
 import r2p
@@ -26,9 +26,9 @@ def _create_argsparser():
         dest='transport', metavar='PARAMS'
     )
     group.add_argument(
-        '-t', '--boot-topic', required=True,
-        help='name of the bootloader topic for the target R2P module; format: "[\\w]{1,%d}"' % r2p.MODULE_NAME_MAX_LENGTH,
-        dest='topic', metavar='BOOT_TOPIC'
+        '-b' '--boot-mode', required=False, action='store_true',
+        help='reboots in bootloader mode',
+        dest='boot_mode'
     )
     
     return parser
@@ -39,6 +39,7 @@ def _main():
     args = parser.parse_args()
     
     logging.basicConfig(stream=sys.stderr, level=verbosity2level(int(args.verbosity)))
+    logging.debug('os.chdir(%s)' % repr(os.path.os.getcwd()))
     logging.debug('sys.argv = ' + repr(sys.argv))
     
     # TODO: Automate transport construction from "--transport" args
@@ -49,31 +50,17 @@ def _main():
     
     mw = r2p.Middleware.instance()
     
-    node = r2p.Node('GETPARAM')
-    pub = r2p.Publisher()
-    sub = r2p.Subscriber(100)
-    bootloader = r2p.BootloaderMaster(pub, sub)
-    
-    rpub = r2p.DebugPublisher(transport)
-    rsub = r2p.DebugSubscriber(transport, 100)
-    
     try:
         exception = None
         mw.initialize()
         transport.open()
-        
-        node.begin()
-        node.advertise(pub, args.topic, r2p.Time_INFINITE, r2p.BootMsg)
-        node.subscribe(sub, args.topic, r2p.BootMsg)
-        
-        transport.advertise(rpub, args.topic, r2p.Time_INFINITE, r2p.BootMsg) # FIXME: Should be automatic
-        transport.subscribe(rsub, args.topic, r2p.BootMsg) # FIXME: Should be automatic
         transport.notify_stop()
         
-        bootloader.initialize()
+        if args.boot_mode:
+            transport.notify_bootload()
+        else:
+            transport.notify_reboot()
         
-        bootloader.reboot()
-
     except KeyboardInterrupt as exception:
         pass
     
@@ -85,7 +72,6 @@ def _main():
         if exception is not None:
             logging.critical(exception)
         
-        node.end()
         mw.uninitialize()
         transport.close()
         

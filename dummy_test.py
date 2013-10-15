@@ -8,7 +8,7 @@ import logging
 from helpers import *
 import r2p
 
-_mw = r2p.Middleware.instance()
+mw = r2p.Middleware.instance()
 
 #==============================================================================
 
@@ -51,7 +51,7 @@ def node1_threadf():
             pub.publish(msg)
         except IndexError:
             logging.warning('Publisher of "%s/%s/%s" overpublished' % \
-                            (_mw.module_name, node.name, pub.topic.name))
+                            (mw.module_name, node.name, pub.topic.name))
     
     node.end()
 
@@ -123,7 +123,7 @@ def node4_threadf():
             pub.publish(msg)
         except Queue.Full:
             logging.warning('Publisher of "%s/%s/%s" overpublished' % \
-                            (_mw.module_name, node.name, pub.topic.name))
+                            (mw.module_name, node.name, pub.topic.name))
     
     node.end()
 
@@ -142,8 +142,7 @@ def _main():
     node4_thread = threading.Thread(name='Node4', target=node4_threadf)
     
     try:
-        _mw.initialize('R2PY', 'BOOT_R2PY')
-        
+        mw.initialize('R2PY')
         dbgtra.open()
         
         #node1_thread.start()
@@ -159,13 +158,13 @@ def _main():
         raise
     
     finally:
-        _mw._stop()
+        mw._stop()
         time.sleep(1)
         #node1_thread.join()
         node2_thread.join()
         #node3_thread.join()
         #node4_thread.join()
-        _mw.uninitialize()
+        mw.uninitialize()
         dbgtra.close()
 
 #==============================================================================

@@ -1,6 +1,6 @@
 #!/usr/bin/env python2
 
-import sys, os
+import sys, os, time
 import logging
 import argparse
 import r2p
@@ -40,7 +40,7 @@ def _create_argsparser():
     group.add_argument(
         '-t', '--boot-topic', required=True,
         help='name of the bootloader topic for the target R2P module; format: "[\\w]{1,%d}"' % r2p.MODULE_NAME_MAX_LENGTH,
-        dest='topic', metavar='BOOT_TOPIC'
+        dest='boot_topic_name', metavar='BOOT_TOPIC'
     )
     
     return parser
@@ -51,6 +51,7 @@ def _main():
     args = parser.parse_args()
     
     logging.basicConfig(stream=sys.stderr, level=verbosity2level(int(args.verbosity)))
+    logging.debug('os.chdir(%s)' % repr(os.path.os.getcwd()))
     logging.debug('sys.argv = ' + repr(sys.argv))
     
     # TODO: Automate transport construction from "--transport" args
@@ -61,28 +62,24 @@ def _main():
     
     mw = r2p.Middleware.instance()
     
-    node = r2p.Node('GETPARAM')
+    node = r2p.Node('LOADER')
     pub = r2p.Publisher()
-    sub = r2p.Subscriber(100)
+    sub = r2p.Subscriber(4)
     bootloader = r2p.BootloaderMaster(pub, sub)
-    
-    rpub = r2p.DebugPublisher(transport)
-    rsub = r2p.DebugSubscriber(transport, 100)
     
     try:
         exception = None
-        mw.initialize()
+        mw.initialize('R2PY')
         transport.open()
         
         node.begin()
-        node.advertise(pub, args.topic, r2p.Time_INFINITE, r2p.BootMsg)
-        node.subscribe(sub, args.topic, r2p.BootMsg)
+        node.advertise(pub, args.boot_topic_name, r2p.Time_INFINITE, r2p.BootMsg)
+        node.subscribe(sub, args.boot_topic_name, r2p.BootMsg)
         
-        transport.advertise(rpub, args.topic, r2p.Time_INFINITE, r2p.BootMsg) # FIXME: Should be automatic
-        transport.subscribe(rsub, args.topic, r2p.BootMsg) # FIXME: Should be automatic
-        transport.notify_stop()
-        
+        time.sleep(1.000)
+        transport.notify_bootload()
         bootloader.initialize()
+        time.sleep(1.000)
         
         if args.last:
             bootloader.remove_last()
@@ -100,8 +97,9 @@ def _main():
 
     finally:
         if exception is not None:
-            logging.critical(exception)
+            logging.exception(exception)
         
+        logging.debug('Unwinding script initialization')
         node.end()
         mw.uninitialize()
         transport.close()

@@ -1,5 +1,3 @@
-# TODO: Check BootlaoderMsg checksums
-# TODO: Add BootlaoderMsg sequence number check
 
 import sys, os, io, socket
 import collections, struct, string, re, random
@@ -429,7 +427,7 @@ class IhexRecord(Serializable):
     
         
     def __repr__(self):
-        return '%s(count=0x%0.2X, offset=0x%0.4X, type=%d, data=%s, checksum=0x%0.2X)' % \
+        return '%s(count=0x%0.2X, offset=0x%0.4X, type=0x%X, data=%s, checksum=0x%0.2X)' % \
                (type(self).__name__, self.count, self.offset, self.type, repr(self.data), self.checksum)
     
         
@@ -483,9 +481,9 @@ class IhexRecord(Serializable):
     
     
     def unmarshal(self, data, offset=0):
-        self.count, self.offset, self.type, self.data, self.checksum = \
+        self.count, self.offset, self.type, data, self.checksum = \
             struct.unpack_from('<BHB%dsB' % self.MAX_DATA_LENGTH, data, offset)
-        self.data = self.data[:self.count]
+        self.data = data[:self.count]
     
     
     def parse_ihex(self, entry):
@@ -578,7 +576,7 @@ class BootMsg(Message):
             elif self.type == e.LENGTH:     value = 'length=0x%0.8X' % self.length
             elif self.type == e.CHUNK:      value = 'chunk(address=%d, length=%d)' % (self.address, self.length)
             else: raise ValueError('Unknown error type %d' % self.type)
-            return '%s(line=%d, reason=%d, type=%d, text=%s, integral=%d, uintegral=%d, address=0x%0.X, length=%d' % \
+            return '%s(line=%d, reason=%d, type=0x%X, text=%s, integral=%d, uintegral=%d, address=0x%0.X, length=%d' % \
                    (type(self).__name__, self.line, self.reason, self.type, repr(self.text), self.integral, self.uintegral, self.address, self.length)
         
         def marshal(self):
@@ -599,7 +597,7 @@ class BootMsg(Message):
             self.line, self.reason, self.type = struct.unpack_from('<HBB', data, offset)
             e = self.TypeEnum
             if   self.type == e.NONE:       pass
-            elif self.type == e.TEXT:       self.text = struct.unpack_from('%ds' % self.MAX_TEXT_LENGTH, data, offset)
+            elif self.type == e.TEXT:       self.text = struct.unpack_from('%ds' % self.MAX_TEXT_LENGTH, data, offset).rstrip('\0')
             elif self.type == e.INTEGRAL:   self.integral = struct.unpack_from('<l', data, offset)
             elif self.type == e.UINTEGRAL:  self.uintegral = struct.unpack_from('<L', data, offset)
             elif self.type == e.ADDRESS:    self.address = struct.unpack_from('<L', data, offset)
@@ -633,8 +631,9 @@ class BootMsg(Message):
         
         def unmarshal(self, data, offset=0):
             self.__init__()
-            self.pgmlen, self.bsslen, self.datalen, self.stacklen, self.name, self.flags = \
+            self.pgmlen, self.bsslen, self.datalen, self.stacklen, name, self.flags = \
                 struct.unpack_from('<LLLL%dsH' % NODE_NAME_MAX_LENGTH, data, offset)
+            self.name = name.rstrip('\0')
 
 
     class LinkingAddresses(Serializable):
@@ -728,8 +727,9 @@ class BootMsg(Message):
         
         def unmarshal(self, data, offset=0):
             self.__init__()
-            self.offset, self.appname, self.length = \
+            self.offset, appname, self.length = \
                 struct.unpack_from('<L%dsB' % NODE_NAME_MAX_LENGTH, data, offset)
+            self.appname = appname.rstrip('\0')
 
 
     class ParamChunk(Serializable):
@@ -792,7 +792,7 @@ class BootMsg(Message):
         elif t == e.PARAM_REQUEST:      subtext = ', param_request=' + repr(self.param_request)
         elif t == e.PARAM_CHUNK:        subtext = ', param_chunk=' + repr(self.param_chunk)
         else: raise ValueError('Unknown bootloader message subtype %d' % t)
-        return '%s(type=%d%s)' % (type(self).__name__, self.type, subtext)
+        return '%s(type=0x%X%s)' % (type(self).__name__, self.type, subtext)
     
     
     def check_type(self, type):
@@ -915,16 +915,20 @@ class MgmtMsg(Message):
 
 
     class TypeEnum:
-        RAW                     = 0x00
+        RAW                         = 0x00
     
-        INFO_MODULE             = 0x10
-        INFO_ADVERTISEMENT      = 0x11
-        INFO_SUBSCRIPTION       = 0x12
+        INFO_MODULE                 = 0x10
+        INFO_ADVERTISEMENT          = 0x11
+        INFO_SUBSCRIPTION           = 0x12
     
-        CMD_GET_NETWORK_STATE   = 0x20
-        CMD_ADVERTISE           = 0x21
-        CMD_SUBSCRIBE_REQUEST   = 0x22
-        CMD_SUBSCRIBE_RESPONSE  = 0x23
+        CMD_GET_NETWORK_STATE       = 0x20
+        CMD_ADVERTISE               = 0x21
+        CMD_SUBSCRIBE_REQUEST       = 0x22
+        CMD_SUBSCRIBE_RESPONSE      = 0x23
+        
+        CMD_STOP                    = 0x30
+        CMD_REBOOT                  = 0x31
+        CMD_BOOTLOAD                = 0x32
     
     
     class Path(Serializable):
@@ -945,7 +949,10 @@ class MgmtMsg(Message):
         
         def unmarshal(self, data, offset=0):
             lengths = (MODULE_NAME_MAX_LENGTH, NODE_NAME_MAX_LENGTH, TOPIC_NAME_MAX_LENGTH)
-            self.module, self.node, self.topic = struct.unpack_from('<%ds%ds%ds' % lengths, data, offset)
+            module, node, topic = struct.unpack_from('<%ds%ds%ds' % lengths, data, offset)
+            self.module = module.rstrip('\0')
+            self.node = node.rstrip('\0')
+            self.topic = topic.rstrip('\0')
     
     
     class PubSub(Serializable):
@@ -968,8 +975,9 @@ class MgmtMsg(Message):
                                self.topic, self.queue_length, self.raw_params, 0xDEADBEEF)
                                
         def unmarshal(self, data, offset=0):
-            self.topic, self.queue_length, self.raw_params, self.transport = \
+            topic, self.queue_length, self.raw_params, self.transport = \
                 struct.unpack_from('<%dsB%dsL' % (_MgmtMsg.MAX_PAYLOAD_LENGTH, self.MAXraw_PARAMS_LENGTH), data, offset)
+            self.topic = topic.rstrip('\0')
     
     
     class Module(Serializable):
@@ -1004,7 +1012,7 @@ class MgmtMsg(Message):
             return struct.pack('<%ds' % MODULE_NAME_MAX_LENGTH, _MODULE_NAME) + self.flags.marshal()
                                
         def unmarshal(self, data, offset=0):
-            self.module = struct.unpack_from('<%ds' % MODULE_NAME_MAX_LENGTH, data, offset)
+            self.module = struct.unpack_from('<%ds' % MODULE_NAME_MAX_LENGTH, data, offset).rstrip('\0')
             self.flags.unmarshal(data, offset + MODULE_NAME_MAX_LENGTH)
     
     
@@ -1021,14 +1029,14 @@ class MgmtMsg(Message):
         e = MgmtMsg.TypeEnum
         if t in (e.RAW, e.CMD_GET_NETWORK_STATE):
             subtext = ''
-        if t == e.INFO_MODULE:
+        if t in (e.CMD_STOP, e.CMD_REBOOT, e.CMD_BOOTLOAD, e.INFO_MODULE):
             subtext = ', module=' + repr(self.module)
         elif t in (e.INFO_ADVERTISEMENT, e.INFO_SUBSCRIPTION):
             subtext = ', path=' + repr(self.path)
         elif t in (e.CMD_ADVERTISE, e.CMD_SUBSCRIBE_REQUEST, e.CMD_SUBSCRIBE_RESPONSE):
             subtext = ', pubsub=' + repr(self.pubsub)
         else: raise ValueError('Unknown management message subtype %d' % self.type)
-        return '%s(type=%d%s)' % (type(self).__name__, self.type, subtext)
+        return '%s(type=0x%X%s)' % (type(self).__name__, self.type, subtext)
     
     
     def check_type(self, type):
@@ -1047,7 +1055,7 @@ class MgmtMsg(Message):
         e = MgmtMsg.TypeEnum
         if t in (e.RAW, e.CMD_GET_NETWORK_STATE):
             bytes = ''
-        if t == e.INFO_MODULE:
+        if t in (e.CMD_STOP, e.CMD_REBOOT, e.CMD_BOOTLOAD, e.INFO_MODULE):
             bytes = self.module.marshal()
         elif t in (e.INFO_ADVERTISEMENT, e.INFO_SUBSCRIPTION):
             bytes = self.path.marshal()
@@ -1063,7 +1071,7 @@ class MgmtMsg(Message):
         e = MgmtMsg.TypeEnum
         if t in (e.RAW, e.CMD_GET_NETWORK_STATE):
             pass
-        if t == e.INFO_MODULE:
+        if t in (e.CMD_STOP, e.CMD_REBOOT, e.CMD_BOOTLOAD, e.INFO_MODULE):
             self.module.unmarshal(payload)
         elif t in (e.INFO_ADVERTISEMENT, e.INFO_SUBSCRIPTION):
             self.path.unmarshal(payload)
@@ -1091,8 +1099,8 @@ class Topic(object):
     
     
     def __repr__(self):
-        return '%s(name=%s, msg_type=%s, max_queue_length=%d, publish_timeout=%f)' % \
-               (type(self).__name__, repr(self.name), self.msg_type.__name__, self.max_queue_length, self.publish_timeout.to_s())
+        return '%s(name=%s, msg_type=%s, max_queue_length=%d, publish_timeout=%s)' % \
+               (type(self).__name__, repr(self.name), self.msg_type.__name__, self.max_queue_length, repr(self.publish_timeout))
     
     def get_lock(self):
         return self._lock
@@ -1351,20 +1359,24 @@ class Node(object):
         self.stopped = False
         self._stop_lock = threading.RLock()
         
+    
+    def __repr__(self):
+        return '%s(name=%s)' % (type(self).__name__, repr(self.name))
+        
         
     def begin(self):
-        logging.debug('Starting Node %s' % repr(self.name))
+        logging.debug('Starting %s' % repr(self))
         Middleware.instance().add_node(self)
         
         
     def end(self):
-        logging.debug('Terminating Node %s' % repr(self.name))
+        logging.debug('Terminating %s' % repr(self))
         Middleware.instance().confirm_stop(self)
         
         
     def advertise(self, pub, topic_name, publish_timeout, msg_type):
-        logging.debug('Node %s advertising %s, msg_type=%s, timeout=%s' % \
-                      (repr(self.name), repr(topic_name), msg_type.__name__, repr(publish_timeout)))
+        logging.debug('%s advertising %s, msg_type=%s, timeout=%s' % \
+                      (repr(self), repr(topic_name), msg_type.__name__, repr(publish_timeout)))
         with self._publishers_lock:
             mw = Middleware.instance()
             mw.advertise_local(pub, topic_name, publish_timeout, msg_type)
@@ -1374,8 +1386,8 @@ class Node(object):
         
         
     def subscribe(self, sub, topic_name, msg_type):
-        logging.debug('Node %s subscribing %s, msg_type=%s' % \
-                      (repr(self.name), repr(topic_name), msg_type.__name__))
+        logging.debug('%s subscribing %s, msg_type=%s' % \
+                      (repr(self), repr(topic_name), msg_type.__name__))
         with self._subscribers_lock:
             mw = Middleware.instance()
             mw.subscribe_local(sub, topic_name, msg_type)
@@ -1480,6 +1492,10 @@ class Transport(object):
         
     def notify_reboot(self):
         self._send_reboot()
+        
+        
+    def notify_bootload(self):
+        self._send_bootload()
     
     
     def touch_publisher(self, topic):
@@ -1554,6 +1570,10 @@ class Transport(object):
         raise NotImplementedError()
     
     
+    def _send_bootload(self):
+        raise NotImplementedError()
+    
+    
     def _recv(self):
         raise NotImplementedError()
         # return (type \[, 'topic', 'payload'\])
@@ -1610,29 +1630,31 @@ class Middleware(object):
         
         self.mgmt_topic = Topic('R2P', MgmtMsg)
         self.boot_topic = Topic(self.bootloader_name, MgmtMsg)
-        self.mgmt_boot_thread = None
+        self.mgmt_thread = None
         
         self.stopped = False
         self.num_running_nodes = 0
         
         
     def initialize(self, module_name=None, bootloader_name=None):
-        if module_name is not None:
-            self.module_name = str(module_name)
-            assert is_module_name(module_name)
+        if module_name is None:
+            module_name = _MODULE_NAME
+        self.module_name = str(module_name)
+        assert is_module_name(self.module_name)
         
-        if bootloader_name is not None:
-            self.bootloader_name = str(bootloader_name)
-            assert is_topic_name(bootloader_name)
-            self.boot_topic.name = self.bootloader_name
+        if bootloader_name is None:
+            bootloader_name = 'BOOT_' + module_name
+        self.bootloader_name = str(bootloader_name)
+        assert is_topic_name(bootloader_name)
+        self.boot_topic.name = self.bootloader_name
         
         logging.info('Initializing middleware %s' % repr(self.module_name))
         
         self.add_topic(self.boot_topic)
         self.add_topic(self.mgmt_topic)
         
-        self.mgmt_boot_thread = threading.Thread(name="R2P_MGMT", target=self.mgmt_threadf, args=(self,))
-        self.mgmt_boot_thread.start()
+        self.mgmt_thread = threading.Thread(name='R2P_MGMT', target=self.mgmt_threadf)
+        self.mgmt_thread.start()
         
         ready = False
         while not ready and ok():
@@ -1660,16 +1682,9 @@ class Middleware(object):
         logging.info('Stopping middleware %s' % repr(self.module_name))
         trigger = False
         with _sys_lock:
-            if not self.stopped:
-                self.stopped = True
-                trigger = True
-        
-        for transport in self.transports:
-            transport.touch_publisher(self.boot_topic)
-            transport.touch_subscriber(self.boot_topic, Middleware.MGMT_BUFFER_LENGTH)
-        
-        if not trigger:
-            return
+            if self.stopped:
+                return
+            self.stopped = True
         
         running = True
         while running:
@@ -1679,10 +1694,8 @@ class Middleware(object):
                     node.notify_stop()
                     running = True
             time.sleep(0.5) # TODO: configure
-            
-        self.mgmt_boot_thread.join()
-        self.mgmt_boot_thread = threading.Thread(name="R2P_BOOT", target=self.boot_threadf, args=(self,))
-        self.mgmt_boot_thread.start()
+        
+        self.mgmt_thread.join()
             
         
     def add_node(self, node):
@@ -1818,7 +1831,7 @@ class Middleware(object):
             transport._advertise_cb(topic, msg.pubsub.raw_params) 
     
     
-    def mgmt_threadf(self, thread):
+    def mgmt_threadf(self):
         node = Node('R2P_MGMT')
         pub = Publisher()
         sub = Subscriber(5, self.mgmt_cb) # TODO: configure
@@ -1867,14 +1880,14 @@ class LineIO(object):
 
 class SerialLineIO(LineIO):
     
-    def __init__(self, dev_path, baud_rate):
+    def __init__(self, dev_path, baud_rate, newline='\r\n'):
         super(SerialLineIO, self).__init__()
-        self._dev_path = dev_path
-        self._baud = baud_rate
+        self._dev_path = str(dev_path)
+        self._baud = int(baud_rate)
         self._ser = None
         self._ti = None
         self._to = None
-        self._newline = '\r\n'
+        self._newline = str(newline)
         self._read_lock = threading.Lock()
         self._write_lock = threading.Lock()
     
@@ -1904,6 +1917,8 @@ class SerialLineIO(LineIO):
         line = ''
         with self._read_lock:
             while True:
+                if not ok():
+                    raise KeyboardInterrupt('soft interrupt')
                 line += str(self._ti.readline())
                 if line[-2:] == self._newline:
                     break
@@ -2030,7 +2045,7 @@ class DebugSubscriber(RemoteSubscriber):
 
 class DebugTransport(Transport):
     
-    MGMT_BUFFER_LENGTH = 100
+    MGMT_BUFFER_LENGTH = 4
     
     
     class MsgParser(object):
@@ -2145,15 +2160,19 @@ class DebugTransport(Transport):
             if self._running:
                 logging.info('Closing %s' % repr(self))
                 self._running = False
-                self._rx_thread.join()
-                self._tx_thread.join()
-                self._rx_thread = None
-                self._tx_thread = None
-                self._lineio.close()
-                logging.info('%s closed' % repr(self))
             else:
                 raise RuntimeError('%s already closed' % repr(self))
-    
+        
+        self._rx_thread.join()
+        self._rx_thread = None
+        
+        self._sub_queue.signal(None)
+        self._tx_thread.join()
+        self._tx_thread = None
+        
+        self._lineio.close()
+        logging.info('%s closed' % repr(self))
+        
     
     def _send_message(self, topic_name, payload):
         assert is_topic_name(topic_name)
@@ -2239,24 +2258,27 @@ class DebugTransport(Transport):
                 cs.compute_checksum())
         line = '@%.8X:00:e:%.2X%s:%.2X%s:%0.2X' % args
         self._lineio.writeline(line)
+        
+        
+    def _send_signal_msg(self, signal_id):
+        now_raw = Time.now().raw
+        cs = Checksummer()
+        cs.add_uint(now_raw)
+        cs.add_bytes(signal_id)
+        line = '@%.8X:00:%s:%0.2X' % (now_raw, signal_id, cs.compute_checksum())
+        self._lineio.writeline(line)
     
     
     def _send_stop(self):
-        now_raw = Time.now().raw
-        cs = Checksummer()
-        cs.add_uint(now_raw)
-        cs.add_bytes('t')
-        line = '@%.8X:00:t:%0.2X' % (now_raw, cs.compute_checksum())
-        self._lineio.writeline(line)
+        self._send_signal_msg('t')
     
     
     def _send_reboot(self):
-        now_raw = Time.now().raw
-        cs = Checksummer()
-        cs.add_uint(now_raw)
-        cs.add_bytes('r')
-        line = '@%.8X:00:r:%0.2X' % (now_raw, cs.compute_checksum())
-        self._lineio.writeline(line)
+        self._send_signal_msg('r')
+    
+    
+    def _send_bootload(self):
+        self._send_signal_msg('b')
     
         
     def _recv(self):
@@ -2463,25 +2485,36 @@ class DebugTransport(Transport):
                 else:
                     raise RuntimeError('Unknown transport message %d' % fields[0])
         
+        except KeyboardInterrupt:
+            logging.debug('_rx_threadf interrupted manually')
+        
         except Exception as e:
-            logging.error(e)
+            logging.exception(e)
             raise
     
     
     def _tx_threadf(self):
-        while self._is_running():
-            try:
-                sub = self._sub_queue.wait()
-            except TimeoutError:
-                continue
-            if sub is None:
-                continue
-            
-            msg, deadline = sub.fetch()
-            try:
-                self._send_message(sub.topic.name, msg.marshal())
-            finally:
-                sub.release(msg)
+        try:
+            while self._is_running():
+                try:
+                    sub = self._sub_queue.wait()
+                except TimeoutError:
+                    continue
+                if sub is None:
+                    continue
+                
+                msg, deadline = sub.fetch()
+                try:
+                    self._send_message(sub.topic.name, msg.marshal())
+                finally:
+                    sub.release(msg)
+        
+        except KeyboardInterrupt:
+            logging.debug('_tx_threadf interrupted manually')
+        
+        except Exception as e:
+            logging.exception(e)
+            raise
 
 #==============================================================================
 
@@ -2493,18 +2526,35 @@ class BootloaderMaster(object):
     
     
     def initialize(self):
+        assert self._pub.topic is self._sub.topic
+        assert self._pub.topic is Middleware.instance().find_topic(self._pub.topic.name)
+        boot_topic = self._pub.topic
         
         # Sync with target board
-        logging.info('Awaiting target bootloader with topic %s' % repr(self._pub.topic.name))
-        try:
-            self._alloc_publish(BootMsg.TypeEnum.NACK)
-            self._fetch_release(BootMsg.TypeEnum.NACK)
-        except Exception as e:
-            logging.debug('Ignoring last received message (broken from previous communication?)')
+        logging.info('Awaiting target bootloader with topic %s' % repr(boot_topic.name))
+        
+        while not boot_topic.has_remote_publishers() and \
+              not boot_topic.has_remote_subscribers():
+            time.sleep(0.500) # TODO: configure
         
         while True:
             try:
+                time.sleep(0.500) # TODO: configure
                 self._alloc_publish(BootMsg.TypeEnum.NACK)
+                time.sleep(0.500) # TODO: configure
+                self._fetch_release(BootMsg.TypeEnum.NACK)
+                break
+            except Queue.Empty:
+                continue
+            except Exception as e:
+                logging.debug('Ignoring last received message (broken from previous communication?)')
+                break
+        
+        while True:
+            try:
+                time.sleep(0.500) # TODO: configure
+                self._alloc_publish(BootMsg.TypeEnum.NACK)
+                time.sleep(0.500) # TODO: configure
                 self._fetch_release(BootMsg.TypeEnum.NACK)
                 break
             except ValueError:
@@ -2561,23 +2611,44 @@ class BootloaderMaster(object):
         self._sub.release(msg)
     
     
-    def _publish(self, msg):
+    def _publish(self, msg, blocking=True, blocking_delay=Time.ms(333), post_delay=None):
         while True:
+            if not ok():
+                raise KeyboardInterrupt('soft interrupt')
             try:
+                # logging.debug('Publishing %s' % repr(msg))
                 self._pub.publish_remotely(msg)
+                if post_delay is not None:
+                    time.sleep(float(post_delay))
                 break
+            
+            except Queue.Full:
+                if blocking_delay is not None:
+                    time.sleep(float(blocking_delay))
+                else:
+                    raise
+            
             except:
                 self._release(msg)
                 raise
     
     
-    def _fetch(self, expected_type_id=None):
+    def _fetch(self, expected_type_id=None, blocking_delay=Time.ms(333), pre_delay=Time.ms(20)):
+        if pre_delay is not None:
+            time.sleep(float(pre_delay))
         while True:
+            if not ok():
+                raise KeyboardInterrupt('soft interrupt')
             try:
                 msg, deadline = self._sub.fetch()
+                # logging.debug('Fetched %s' % repr(msg))
                 break
+            
             except Queue.Empty:
-                time.sleep(0.100) # TODO: configure
+                if blocking_delay is not None:
+                    time.sleep(float(blocking_delay))
+                else:
+                    raise
         
         if msg.type == expected_type_id:
             return msg
@@ -2637,17 +2708,18 @@ class BootloaderMaster(object):
             datalen = data_end - data_start
         
         appflags = BootMsg.LinkingSetup.FlagsEnum.ENABLED
+        stacklen = app_stack_size
         logging.info('  pgmlen   = 0x%0.8X (%d)' % (pgmlen, pgmlen))
         logging.info('  bsslen   = 0x%0.8X (%d)' % (bsslen, bsslen))
         logging.info('  datalen  = 0x%0.8X (%d)' % (datalen, datalen))
-        logging.info('  stacklen = 0x%0.8X (%d)' % (app_stack_size, app_stack_size))
+        logging.info('  stacklen = 0x%0.8X (%d)' % (stacklen, stacklen))
         logging.info('  appname  = %s' % repr(app_name))
         logging.info('  flags    = 0x%0.4X' % appflags)
         
         # Send the section sizes and app name
         logging.info('Sending section lengths to target module')
         msg = self._alloc(BootMsg.TypeEnum.LINKING_SETUP)
-        msg.set_linking_setup(pgmlen, bsslen, datalen, app_stack_size, app_name, appflags)
+        msg.set_linking_setup(pgmlen, bsslen, datalen, stacklen, app_name, appflags)
         linking_setup = msg.linking_setup
         self._publish(msg)
         
@@ -2700,16 +2772,16 @@ class BootloaderMaster(object):
             mainadr = _get_function_address(elffile, APP_THREAD_SYMBOL)
             logging.info('  mainadr   = 0x%0.8X' % mainadr)
             
-            config_start  = _get_symbol_address(elffile, '_config_start_')
-            config_end    = _get_symbol_address(elffile, '_config_end_')
+            config_start  = _get_symbol_address(elffile, '__config_start__')
+            config_end    = _get_symbol_address(elffile, '__config_end__')
             cfgadr = config_start
             cfglen = config_end - config_start
             logging.info('  cfgadr    = 0x%0.8X' % cfgadr)
             logging.info('  cfglen    = 0x%0.8X (%d)' % (cfglen, cfglen))
             
             try:
-                ctorsadr = _get_symbol_address(elffile, '_init_array_start')
-                ctorslen = (_get_symbol_address(elffile, '_init_array_end') - ctorsadr) / 4
+                ctorsadr = _get_symbol_address(elffile, '__init_array_start')
+                ctorslen = (_get_symbol_address(elffile, '__init_array_end') - ctorsadr) / 4
             except RuntimeError:
                 logging.debug('Section "constructors" looks empty')
                 ctorsadr = 0
@@ -2718,8 +2790,8 @@ class BootloaderMaster(object):
             logging.info('  ctorslen  = 0x%0.8X (%d)' % (ctorslen, ctorslen))
             
             try:
-                dtorsadr = _get_symbol_address(elffile, '_fini_array_start')
-                dtorslen = (_get_symbol_address(elffile, '_fini_array_end') - dtorsadr) / 4
+                dtorsadr = _get_symbol_address(elffile, '__fini_array_start')
+                dtorslen = (_get_symbol_address(elffile, '__fini_array_end') - dtorsadr) / 4
             except RuntimeError:
                 logging.debug('Section "destructors" looks empty')
                 dtorsadr = 0
@@ -2808,7 +2880,7 @@ class BootloaderMaster(object):
             logging.info('  pgmlen     = 0x%0.8X (%d)' % (setup.pgmlen, setup.pgmlen))
             logging.info('  bsslen     = 0x%0.8X (%d)' % (setup.bsslen, setup.bsslen))
             logging.info('  datalen    = 0x%0.8X (%d)' % (setup.datalen, setup.datalen))
-            logging.info('  app_stack_size   = 0x%0.8X (%d)' % (setup.app_stack_size, setup.app_stack_size))
+            logging.info('  stacklen   = 0x%0.8X (%d)' % (setup.stacklen, setup.stacklen))
             logging.info('  name       = %s' % repr(setup.name))
             logging.info('  flags      = 0x%0.4X' % setup.flags)
             self._release(msg)
@@ -2859,14 +2931,12 @@ class BootloaderMaster(object):
         # Send the parameter request
         length = len(value)
         logging.info('Sending parameter request')
-        logging.info('  app_name = %s' % repr(app_name))
+        logging.info('  appname = %s' % repr(app_name))
         logging.info('  offset  = 0x%0.8X (%d)' % (offset, offset))
         logging.info('  length  = 0x%0.8X (%d)' % (length, length))
         
         msg = self._alloc(BootMsg.TypeEnum.PARAM_REQUEST)
-        msg.param_request.offset = offset
-        msg.param_request.app_name = app_name
-        msg.param_request.length = length
+        msg.set_param_request(offset, app_name, length)
         self._publish(msg)
         self._fetch_release(BootMsg.TypeEnum.ACK)
         
@@ -2915,9 +2985,7 @@ class BootloaderMaster(object):
         logging.info('  length  = 0x%0.8X (%d)' % (length, length))
         
         msg = self._alloc(BootMsg.TypeEnum.PARAM_REQUEST)
-        msg.param_request.offset = offset
-        msg.param_request.app_name = app_name
-        msg.param_request.length = length
+        msg.set_param_request(offset, app_name, length)
         self._publish(msg)
         
         # Receive each parameter chunk
