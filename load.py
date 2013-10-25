@@ -27,8 +27,13 @@ def _create_argsparser():
     )
     group.add_argument(
         '-t', '--boot-topic', required=True,
-        help='name of the bootloader topic for the target R2P module; format: "[\\w]{1,%d}"' % r2p.MODULE_NAME_MAX_LENGTH,
+        help='name of the bootloader topic for the target R2P module; format: "[\\w]{1,%d}"' % r2p.TOPIC_NAME_MAX_LENGTH,
         dest='boot_topic_name', metavar='BOOT_TOPIC'
+    )
+    group.add_argument(
+        '-e', '--boot-module', required=True,
+        help='name of the target R2P module; format: "[\\w]{1,%d}"' % r2p.MODULE_NAME_MAX_LENGTH,
+        dest='boot_module_name', metavar='BOOT_MODULE'
     )
     
     group = parser.add_argument_group('app setup')
@@ -133,10 +138,13 @@ def _main():
         node.advertise(pub, args.boot_topic_name, r2p.Time_INFINITE, r2p.BootMsg)
         node.subscribe(sub, args.boot_topic_name, r2p.BootMsg)
         
-        time.sleep(1.000)
-        transport.notify_bootload()
+        time.sleep(0.200)
+        mw.stop_remote(args.boot_module_name)
+        time.sleep(0.200)
+        mw.reboot_remote(args.boot_module_name, True)
+        time.sleep(0.200)
         bootloader.initialize()
-        time.sleep(1.000)
+        time.sleep(0.200)
         
         bootloader.load(app_name        = str(args.app_name),
                         app_hex_path    = str(args.app_hex_path),
@@ -171,6 +179,9 @@ def _main():
 
 if __name__ == '__main__':
     try:
+        os.chdir('/home/texzk/openrobots/Middleware/apps/pub_led')
+        sys.argv = ['/home/texzk/openrobots/python/load.py', '-vvvv', '--boot-topic', 'BOOT_IMU_GW', '--boot-module', 'pub_led', '--app-name', 'pub_led', '--app-stack-size', '1024', '--sys-elf', '/home/texzk/openrobots/R2P_IMU_test_mw/build/ch.elf', '--app-elf', 'build/pub_led.elf', '--app-hex', 'build/pub_led.hex', '--ld-cmd', 'arm-none-eabi-ld', '--ld-script', '/home/texzk/openrobots/R2P_IMU_test_mw/STM32F103xB_bootloader.ld', '--ld-map', 'build/pub_led.map', '--ld-objects', 'build/obj/common.o', 'build/obj/pub_led.o']
+
         _main()
     except Exception as e:
         raise

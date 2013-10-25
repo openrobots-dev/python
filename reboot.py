@@ -52,13 +52,15 @@ def _main():
     
     try:
         exception = None
-        mw.initialize()
+        mw.initialize('R2PY') # TODO: pre_init(), post_init()
         transport.open()
         transport.notify_stop()
         
         if args.boot_mode:
+            logging.info('Rebooting target module in bootloader mode')
             transport.notify_bootload()
         else:
+            logging.info('Rebooting target module')
             transport.notify_reboot()
         
     except KeyboardInterrupt as exception:

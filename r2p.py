@@ -333,7 +333,6 @@ class MemoryPool(object):
     def __init__(self, type):
         self._type = type
         self._free_queue = Queue.LifoQueue()
-        self._lock = threading.Lock()
         
         
     def alloc(self):
@@ -506,6 +505,17 @@ class Message(Serializable):
     
     def __init__(self):
         super(Message, self).__init__()
+        self._source = None
+    
+    
+    @staticmethod
+    def get_type_size():
+        raise NotImplementedError()
+    
+    
+    @staticmethod
+    def get_payload_size():
+        raise NotImplementedError()
 
 #==============================================================================
 
@@ -795,6 +805,16 @@ class BootMsg(Message):
         return '%s(type=0x%X%s)' % (type(self).__name__, self.type, subtext)
     
     
+    @staticmethod
+    def get_type_size():
+        return BootMsg.get_payload_size()
+    
+    
+    @staticmethod
+    def get_payload_size():
+        return BootMsg.MAX_LENGTH
+    
+    
     def check_type(self, type):
         assert not type is None
         if self.type != type:
@@ -921,10 +941,9 @@ class MgmtMsg(Message):
         INFO_ADVERTISEMENT          = 0x11
         INFO_SUBSCRIPTION           = 0x12
     
-        CMD_GET_NETWORK_STATE       = 0x20
-        CMD_ADVERTISE               = 0x21
-        CMD_SUBSCRIBE_REQUEST       = 0x22
-        CMD_SUBSCRIBE_RESPONSE      = 0x23
+        CMD_ADVERTISE               = 0x20
+        CMD_SUBSCRIBE_REQUEST       = 0x21
+        CMD_SUBSCRIBE_RESPONSE      = 0x22
         
         CMD_STOP                    = 0x30
         CMD_REBOOT                  = 0x31
@@ -956,27 +975,32 @@ class MgmtMsg(Message):
     
     
     class PubSub(Serializable):
-        def __init__(self, _MgmtMsg, topic='', transport=None, queue_length=0, raw_params=''):
+        def __init__(self, _MgmtMsg, topic='', transport=None, payload_size=0, queue_length=0, raw_params=''):
             super(MgmtMsg.PubSub, self).__init__()
             self._MgmtMsg = _MgmtMsg
-            self.MAXraw_PARAMS_LENGTH = _MgmtMsg.MAX_PAYLOAD_LENGTH - TOPIC_NAME_MAX_LENGTH - 4 - 1
+            self.MAX_RAW_PARAMS_LENGTH = self._MgmtMsg.MAX_PAYLOAD_LENGTH - TOPIC_NAME_MAX_LENGTH - 4 - 1
             self.topic = topic
             self.transport = transport
+            self.payload_size = payload_size
             self.queue_length = queue_length
             self.raw_params = raw_params
         
         def __repr__(self):
-            tn = self.transport.name if self.transport is not None else 'None'
-            return '%s(MgmtMsg, topic=%s, transport=<%s>, queue_length=%d, raw_params=%s)' % \
-                   (type(self).__name__, repr(self.topic), tn, self.queue_length, repr(self.raw_params))
+            if self.transport is not None:
+                tn = self.transport.name
+            else:
+                tn = 'None'
+            return '%s(MgmtMsg, topic=%s, transport=<%s>, payload_size=%d, queue_length=%d, raw_params=%s)' % \
+                   (type(self).__name__, repr(self.topic), tn, self.payload_size, self.queue_length, repr(self.raw_params))
         
         def marshal(self):
-            return struct.pack('<%dsB%dsL' % (_MgmtMsg.MAX_PAYLOAD_LENGTH, self.MAXraw_PARAMS_LENGTH),
-                               self.topic, self.queue_length, self.raw_params, 0xDEADBEEF)
-                               
+            return struct.pack('<%dsLBB%ds' % (TOPIC_NAME_MAX_LENGTH, self.MAX_RAW_PARAMS_LENGTH),
+                               self.topic, 0, self.payload_size, self.queue_length, self.raw_params)
+        
         def unmarshal(self, data, offset=0):
-            topic, self.queue_length, self.raw_params, self.transport = \
-                struct.unpack_from('<%dsB%dsL' % (_MgmtMsg.MAX_PAYLOAD_LENGTH, self.MAXraw_PARAMS_LENGTH), data, offset)
+            topic, transport, self.payload_size, self.queue_length, self.raw_params = \
+                struct.unpack_from('<%dsLBB%ds' % (TOPIC_NAME_MAX_LENGTH, self.MAX_RAW_PARAMS_LENGTH), data, offset)
+            self.transport = None
             self.topic = topic.rstrip('\0')
     
     
@@ -1027,7 +1051,7 @@ class MgmtMsg(Message):
     def __repr__(self):
         t = self.type
         e = MgmtMsg.TypeEnum
-        if t in (e.RAW, e.CMD_GET_NETWORK_STATE):
+        if t in (e.RAW, ):
             subtext = ''
         if t in (e.CMD_STOP, e.CMD_REBOOT, e.CMD_BOOTLOAD, e.INFO_MODULE):
             subtext = ', module=' + repr(self.module)
@@ -1037,6 +1061,16 @@ class MgmtMsg(Message):
             subtext = ', pubsub=' + repr(self.pubsub)
         else: raise ValueError('Unknown management message subtype %d' % self.type)
         return '%s(type=0x%X%s)' % (type(self).__name__, self.type, subtext)
+    
+    
+    @staticmethod
+    def get_type_size():
+        return MgmtMsg.get_payload_size()
+    
+    
+    @staticmethod
+    def get_payload_size():
+        return MgmtMsg.MAX_PAYLOAD_LENGTH + 1
     
     
     def check_type(self, type):
@@ -1053,7 +1087,7 @@ class MgmtMsg(Message):
     def marshal(self):
         t = self.type
         e = MgmtMsg.TypeEnum
-        if t in (e.RAW, e.CMD_GET_NETWORK_STATE):
+        if t in (e.RAW, ):
             bytes = ''
         if t in (e.CMD_STOP, e.CMD_REBOOT, e.CMD_BOOTLOAD, e.INFO_MODULE):
             bytes = self.module.marshal()
@@ -1062,14 +1096,14 @@ class MgmtMsg(Message):
         elif t in (e.CMD_ADVERTISE, e.CMD_SUBSCRIBE_REQUEST, e.CMD_SUBSCRIBE_RESPONSE):
             bytes = self.pubsub.marshal()
         else: raise ValueError('Unknown management message subtype %d' % self.type)
-        return struct.pack('<B%ds' % (self.MAX_PAYLOAD_LENGTH - 1), self.type, bytes)
+        return struct.pack('<%dsB' % self.MAX_PAYLOAD_LENGTH, bytes, self.type)
         
         
     def unmarshal(self, data, offset=0):
         self.clean()
-        t, payload = struct.unpack_from('<B%ds' % (self.MAX_PAYLOAD_LENGTH - 1), data, offset)
+        payload, t = struct.unpack_from('<%dsB' % self.MAX_PAYLOAD_LENGTH, data, offset)
         e = MgmtMsg.TypeEnum
-        if t in (e.RAW, e.CMD_GET_NETWORK_STATE):
+        if t in (e.RAW, ):
             pass
         if t in (e.CMD_STOP, e.CMD_REBOOT, e.CMD_BOOTLOAD, e.INFO_MODULE):
             self.module.unmarshal(payload)
@@ -1096,11 +1130,21 @@ class Topic(object):
         self.remote_subscribers = []
         
         self._lock = threading.Lock()
+        self._msg_pool = MemoryPool(msg_type)
     
     
     def __repr__(self):
         return '%s(name=%s, msg_type=%s, max_queue_length=%d, publish_timeout=%s)' % \
                (type(self).__name__, repr(self.name), self.msg_type.__name__, self.max_queue_length, repr(self.publish_timeout))
+    
+    
+    def get_type_size(self):
+        return self.msg_type.get_type_size()
+    
+    
+    def get_payload_size(self):
+        return self.msg_type.get_payload_size()
+    
     
     def get_lock(self):
         return self._lock
@@ -1141,15 +1185,21 @@ class Topic(object):
     
     
     def alloc(self):
-        return self.msg_type()
+        with self._lock:
+            # return self._msg_pool.alloc()
+            return self.msg_type()
     
     
     def release(self, msg):
-        pass
-    
+        with self._lock:
+            # self.free(msg)
+            pass
+        
     
     def free(self, msg):
-        pass
+        with self._lock:
+            # self._msg_pool.free(msg)
+            pass
     
     
     def extend_pool(self, length):
@@ -1629,8 +1679,11 @@ class Middleware(object):
         self._transports_lock = threading.Lock()
         
         self.mgmt_topic = Topic('R2P', MgmtMsg)
-        self.boot_topic = Topic(self.bootloader_name, MgmtMsg)
         self.mgmt_thread = None
+        self.mgmt_pub = Publisher()
+        self.mgmt_sub = Subscriber(5, self.mgmt_cb) # TODO: configure
+        
+        self.boot_topic = Topic(self.bootloader_name, MgmtMsg)
         
         self.stopped = False
         self.num_running_nodes = 0
@@ -1697,7 +1750,27 @@ class Middleware(object):
         
         self.mgmt_thread.join()
             
+    
+    def stop_remote(self, module_name):
+        msg = self.mgmt_pub.alloc()
+        msg.clean(MgmtMsg.TypeEnum.CMD_STOP)
+        msg.module.name = module_name
+        self.mgmt_pub.publish_remotely(msg)
+            
+    
+    def reboot_remote(self, module_name, bootload_mode=False):
+        msg = self.mgmt_pub.alloc()
+        msg.clean()
+        msg.module.module = str(module_name)
         
+        if bootload_mode:
+            msg.type = MgmtMsg.TypeEnum.CMD_BOOTLOAD
+        else:
+            msg.type = MgmtMsg.TypeEnum.CMD_REBOOT
+        
+        self.mgmt_pub.publish_remotely(msg)
+    
+    
     def add_node(self, node):
         logging.debug('Adding node %s' % repr(node.name))
         with self._nodes_lock:
@@ -1833,12 +1906,10 @@ class Middleware(object):
     
     def mgmt_threadf(self):
         node = Node('R2P_MGMT')
-        pub = Publisher()
-        sub = Subscriber(5, self.mgmt_cb) # TODO: configure
         
         node.begin()
-        node.advertise(pub, 'R2P', Time.ms(200), MgmtMsg) # TODO: configure
-        node.subscribe(sub, 'R2P', MgmtMsg) # TODO: configure
+        node.advertise(self.mgmt_pub, 'R2P', Time.ms(200), MgmtMsg) # TODO: configure
+        node.subscribe(self.mgmt_sub, 'R2P', MgmtMsg) # TODO: configure
         
         while ok():
             try:
@@ -1907,6 +1978,7 @@ class SerialLineIO(LineIO):
         
     def close(self):
         if self._ser is not None:
+            self._to.flush()
             self._ser.close()
             self._ser = None
         self._ti = None
@@ -2196,6 +2268,7 @@ class DebugTransport(Transport):
         assert is_topic_name(topic_name)
         module_name = Middleware.instance().module_name
         assert is_module_name(module_name)
+        payload_size = topic.get_payload_size()
         now_raw = Time.now().raw
         cs = Checksummer()
         cs.add_uint(now_raw)
@@ -2205,10 +2278,11 @@ class DebugTransport(Transport):
         cs.add_bytes(module_name)
         cs.add_uint(len(topic_name))
         cs.add_bytes(topic_name)
+        cs.add_uint(payload_size)
         args = (now_raw, len(module_name), module_name,
-                len(topic_name), topic_name,
+                len(topic_name), topic_name, payload_size,
                 cs.compute_checksum())
-        line = '@%.8X:00:p:%.2X%s:%.2X%s:%0.2X' % args
+        line = '@%.8X:00:p:%.2X%s:%.2X%s:%0.4X:%0.2X' % args
         self._lineio.writeline(line)
     
     
@@ -2220,6 +2294,7 @@ class DebugTransport(Transport):
         assert 0 < queue_length < 256
         module_name = Middleware.instance().module_name
         assert is_module_name(module_name)
+        payload_size = topic.get_payload_size()
         now_raw = Time.now().raw
         cs = Checksummer()
         cs.add_uint(now_raw)
@@ -2230,11 +2305,12 @@ class DebugTransport(Transport):
         cs.add_bytes(module_name)
         cs.add_uint(len(topic_name))
         cs.add_bytes(topic_name)
+        cs.add_uint(payload_size)
         args = (now_raw, queue_length,
                 len(module_name), module_name,
-                len(topic_name), topic_name,
+                len(topic_name), topic_name, payload_size,
                 cs.compute_checksum())
-        line = '@%.8X:00:s%.2X:%.2X%s:%.2X%s:%0.2X' % args
+        line = '@%.8X:00:s%.2X:%.2X%s:%.2X%s:%0.4X:%0.2X' % args
         self._lineio.writeline(line)
     
     
@@ -2244,6 +2320,7 @@ class DebugTransport(Transport):
         assert 0 < len(topic_name) < 256
         module_name = Middleware.instance().module_name
         assert 0 < len(module_name) <= 7
+        payload_size = topic.get_payload_size()
         now_raw = Time.now().raw
         cs = Checksummer()
         cs.add_uint(now_raw)
@@ -2253,10 +2330,11 @@ class DebugTransport(Transport):
         cs.add_bytes(module_name)
         cs.add_uint(len(topic_name))
         cs.add_bytes(topic_name)
+        cs.add_uint(payload_size)
         args = (now_raw, len(module_name), module_name,
-                len(topic_name), topic_name,
+                len(topic_name), topic_name, payload_size,
                 cs.compute_checksum())
-        line = '@%.8X:00:e:%.2X%s:%.2X%s:%0.2X' % args
+        line = '@%.8X:00:e:%.2X%s:%.2X%s:%0.4X:%0.2X' % args
         self._lineio.writeline(line)
         
         
@@ -2265,7 +2343,7 @@ class DebugTransport(Transport):
         cs = Checksummer()
         cs.add_uint(now_raw)
         cs.add_bytes(signal_id)
-        line = '@%.8X:00:%s:%0.2X' % (now_raw, signal_id, cs.compute_checksum())
+        line = '@%0.8X:00:%s:%0.2X' % (now_raw, signal_id, cs.compute_checksum())
         self._lineio.writeline(line)
     
     
@@ -2336,11 +2414,15 @@ class DebugTransport(Transport):
                 cs.add_bytes(topic)
                 
                 parser.expect_char(':')
+                payload_size = parser.read_unsigned(2)
+                cs.add_uint(payload_size)
+                
+                parser.expect_char(':')
                 checksum = parser.read_unsigned(1)
                 cs.check(checksum)
                 
                 parser.check_eol()
-                return (Transport.TypeEnum.ADVERTISEMENT, topic)
+                return (Transport.TypeEnum.ADVERTISEMENT, topic, payload_size)
             
             elif typechar == 's':
                 queue_length = parser.read_unsigned(1)
@@ -2359,11 +2441,15 @@ class DebugTransport(Transport):
                 cs.add_bytes(topic)
                 
                 parser.expect_char(':')
+                payload_size = parser.read_unsigned(2)
+                cs.add_uint(payload_size)
+                
+                parser.expect_char(':')
                 checksum = parser.read_unsigned(1)
                 cs.check(checksum)
                 
                 parser.check_eol()
-                return (Transport.TypeEnum.SUBSCRIPTION_REQUEST, topic, queue_length)
+                return (Transport.TypeEnum.SUBSCRIPTION_REQUEST, topic, payload_size, queue_length)
             
             elif typechar == 'e':
                 parser.expect_char(':')
@@ -2379,11 +2465,15 @@ class DebugTransport(Transport):
                 cs.add_bytes(topic)
                 
                 parser.expect_char(':')
+                payload_size = parser.read_unsigned(2)
+                cs.add_uint(payload_size)
+                
+                parser.expect_char(':')
                 checksum = parser.read_unsigned(1)
                 cs.check(checksum)
                 
                 parser.check_eol()
-                return (Transport.TypeEnum.SUBSCRIPTION_RESPONSE, topic)
+                return (Transport.TypeEnum.SUBSCRIPTION_RESPONSE, topic, payload_size)
             
             elif typechar == 't':
                 parser.expect_char(':')
@@ -2423,7 +2513,7 @@ class DebugTransport(Transport):
             while self._is_running():
                 try:
                     fields = self._recv()
-                except ParserError as e:
+                except (ParserError, ValueError) as e:
                     logging.debug(str(e))
                     continue
                 
@@ -2442,13 +2532,16 @@ class DebugTransport(Transport):
                                 break
                         else:
                             continue
-                    
-                    msg = rpub.alloc()
                     try:
+                        msg = rpub.alloc()
                         msg.unmarshal(fields[2])
+                        msg._source = self
                         rpub.publish_locally(msg)
+                    except Queue.Full:
+                        logging.warning('Full %s' % repr(rpub))
+                        pass
                     except Exception as e: # suppress errors
-                        topic.release(msg) # FIXME: Create BasePublisher.release() like BaseSubscriber.release()
+                        topic.release(msg) # TODO: Create BasePublisher.release() like BaseSubscriber.release()
                         logging.warning(e)
                 
                 elif t == Transport.TypeEnum.ADVERTISEMENT:
@@ -2457,6 +2550,7 @@ class DebugTransport(Transport):
                     msg.type = MgmtMsg.TypeEnum.CMD_ADVERTISE
                     msg.pubsub.topic = fields[1]
                     msg.pubsub.transport = self
+                    msg.pubsub.payload_size = fields[2]
                     self._mgmt_rpub.publish_locally(msg)
                 
                 elif t == Transport.TypeEnum.SUBSCRIPTION_REQUEST:
@@ -2464,8 +2558,9 @@ class DebugTransport(Transport):
                     msg = self._mgmt_rpub.alloc()
                     msg.type = MgmtMsg.TypeEnum.CMD_SUBSCRIBE_REQUEST
                     msg.pubsub.topic = fields[1]
-                    msg.pubsub.queue_length = fields[2]
                     msg.pubsub.transport = self
+                    msg.pubsub.payload_size = fields[2]
+                    msg.pubsub.queue_length = fields[3]
                     self._mgmt_rpub.publish_locally(msg)
                 
                 elif t == Transport.TypeEnum.SUBSCRIPTION_RESPONSE:
@@ -2473,6 +2568,7 @@ class DebugTransport(Transport):
                     msg = self._mgmt_rpub.alloc()
                     msg.type = MgmtMsg.TypeEnum.CMD_SUBSCRIBE_RESPONSE
                     msg.pubsub.topic = fields[1]
+                    msg.pubsub.payload_size = fields[2]
                     msg.pubsub.transport = self
                     self._mgmt_rpub.publish_locally(msg)
                 
@@ -2611,7 +2707,7 @@ class BootloaderMaster(object):
         self._sub.release(msg)
     
     
-    def _publish(self, msg, blocking=True, blocking_delay=Time.ms(333), post_delay=None):
+    def _publish(self, msg, blocking=True, blocking_delay=Time.ms(50), post_delay=None):
         while True:
             if not ok():
                 raise KeyboardInterrupt('soft interrupt')
@@ -2633,7 +2729,7 @@ class BootloaderMaster(object):
                 raise
     
     
-    def _fetch(self, expected_type_id=None, blocking_delay=Time.ms(333), pre_delay=Time.ms(20)):
+    def _fetch(self, expected_type_id=None, blocking_delay=Time.ms(50), pre_delay=Time.ms(50)):
         if pre_delay is not None:
             time.sleep(float(pre_delay))
         while True:

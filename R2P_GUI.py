@@ -1,6 +1,6 @@
 #!/usr/bin/env python2
 
-import sys, os
+import sys, os, time, threading
 import r2p
 import R2P_GUI_ui
 from PySide import QtCore, QtGui, QtUiTools
@@ -18,6 +18,7 @@ class Window(QtGui.QMainWindow):
         self.ui = R2P_GUI_ui.Ui()
         self.ui.setupUi(self)
     
+        self._lock = threading.RLock()
         self.r2p_path = None
         self.chibios_path = None
         self.booting = False
@@ -31,6 +32,9 @@ class Window(QtGui.QMainWindow):
         self.app_name = None
         self.app_stack_size = None
 
+        self.boot_thread = None
+        self.mgmt_thread = None
+        
         # TODO: Build the transport elsewhere, and with user settings
         self.transport = r2p.DebugTransport(r2p.SerialLineIO('/dev/ttyUSB0', 115200))
 
@@ -56,7 +60,6 @@ class Window(QtGui.QMainWindow):
                 self.valid_boot_topic = self.boot_topic
                 self.booting = True
                 self._create_bootloader()
-                self.bootloader.stop()
                 return True
             else:
                 return False
@@ -64,6 +67,41 @@ class Window(QtGui.QMainWindow):
             return True
 
 
+    def mgmt_cb(self):
+        pass
+
+
+    def mgmt_threadf(self):
+        node = r2p.Node('MGMT')
+        pub = r2p.Publisher()
+        subs = r2p.Subscriber(5, self.mgmt_cb)
+        
+        node.begin()
+        node.advertise(pub, 'R2P', Time.ms(1000), r2p.MgmtMsg)
+        node.subscribe(sub, 'R2P', r2p.MgmtMsg)
+        
+        while r2p.ok():
+            node.spin(Time.ms(333))
+        
+        node.end()
+    
+    
+    def boot_threadf(self):
+        node = r2p.Node('LOADER')
+        pub = r2p.Publisher()
+        subs = r2p.Subscriber(5, self.mgmt_cb)
+        
+        node.begin()
+        with self._lock:
+            node.advertise(pub, self.boot_topic, Time.ms(1000), r2p.MgmtMsg)
+            node.subscribe(sub, self.boot_topic, r2p.MgmtMsg)
+        
+        while r2p.ok():
+            node.spin(Time.ms(333))
+        
+        node.end()
+        
+        
     def bootRefreshApps(self):
         if not self._start_booting():
             return

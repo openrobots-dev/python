@@ -78,7 +78,7 @@ def ledpub_node(mw, transport):
     transport.subscribe(rsub, "leds", LedMsg)  # FIXME: Should be automatic
     transport.notify_advertisement(rsub.topic)
     
-    msg = LedMsg(2, 0)
+    msg = LedMsg(3, 0)
     
     
     while r2p.ok():
@@ -125,13 +125,13 @@ def _main():
     logging.debug('sys.argv = ' + repr(sys.argv))
     
     # TODO: Automate transport construction from "--transport" args
-    # assert args.transport[0] == 'DebugTransport'
-    # assert args.transport[1] == 'SerialLineIO'
-    # lineio = r2p.SerialLineIO(str(args.transport[2]), int(args.transport[3]))
-    # transport = r2p.DebugTransport('dbgtra', lineio)
+    assert args.transport[0] == 'DebugTransport'
+    assert args.transport[1] == 'SerialLineIO'
+    lineio = r2p.SerialLineIO(str(args.transport[2]), int(args.transport[3]))
+    transport = r2p.DebugTransport('dbgtra', lineio)
     
-    lineio = r2p.TCPLineIO("10.0.0.12", 23)
-    transport = r2p.DebugTransport("netdbg", lineio)
+    # lineio = r2p.TCPLineIO("10.0.0.12", 23)
+    # transport = r2p.DebugTransport("netdbg", lineio)
     
     mw = r2p.Middleware.instance()
     mw.initialize()

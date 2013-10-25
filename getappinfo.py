@@ -93,10 +93,6 @@ def _main():
 
 if __name__ == '__main__':
     try:
-        # XXX
-        os.chdir('/home/texzk/openrobots/R2P_IMU_test_mw/apps/pub_led')
-        sys.argv = ['/home/texzk/openrobots/python/getappinfo.py', '-vvvv', '--boot-topic', 'BOOT_IMU_0']
-
         _main()
     except Exception as e:
         raise
