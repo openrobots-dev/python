@@ -1033,7 +1033,7 @@ class MgmtMsg(Message):
             return '%s(MgmtMsg, module=%s, flags=%s)' % (type(self).__name__, repr(self.module), repr(self.flags))
         
         def marshal(self):
-            return struct.pack('<%ds' % MODULE_NAME_MAX_LENGTH, _MODULE_NAME) + self.flags.marshal()
+            return struct.pack('<%ds' % MODULE_NAME_MAX_LENGTH, self.module) + self.flags.marshal()
                                
         def unmarshal(self, data, offset=0):
             self.module = struct.unpack_from('<%ds' % MODULE_NAME_MAX_LENGTH, data, offset).rstrip('\0')
@@ -2638,7 +2638,7 @@ class BootloaderMaster(object):
                 time.sleep(0.500) # TODO: configure
                 self._alloc_publish(BootMsg.TypeEnum.NACK)
                 time.sleep(0.500) # TODO: configure
-                self._fetch_release(BootMsg.TypeEnum.NACK)
+                self._fetch_release(BootMsg.TypeEnum.NACK, blocking_delay=None)
                 break
             except Queue.Empty:
                 continue
@@ -2707,7 +2707,7 @@ class BootloaderMaster(object):
         self._sub.release(msg)
     
     
-    def _publish(self, msg, blocking=True, blocking_delay=Time.ms(50), post_delay=None):
+    def _publish(self, msg, blocking_delay=Time.ms(50), post_delay=None):
         while True:
             if not ok():
                 raise KeyboardInterrupt('soft interrupt')
@@ -2753,13 +2753,13 @@ class BootloaderMaster(object):
             raise ValueError('type_id=%s != expected_type_id=%s' % (msg.type, expected_type_id))
     
     
-    def _alloc_publish(self, type_id):
+    def _alloc_publish(self, type_id, blocking_delay=Time.ms(50), post_delay=None):
         msg = self._alloc(type_id)
-        self._publish(msg)
+        self._publish(msg, blocking_delay, post_delay)
     
     
-    def _fetch_release(self, expected_type_id):
-        msg = self._fetch(expected_type_id)
+    def _fetch_release(self, expected_type_id, blocking_delay=Time.ms(50), pre_delay=Time.ms(50)):
+        msg = self._fetch(expected_type_id, blocking_delay, pre_delay)
         self._release(msg)
     
     
