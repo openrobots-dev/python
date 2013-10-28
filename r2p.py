@@ -34,6 +34,13 @@ _topic_regex = re.compile(TOPIC_NAME_REGEX_FMT)
 
 #==============================================================================
 
+def _enum(*sequential, **named):
+    enums = dict(zip(sequential, range(len(sequential))), **named)
+    reverse = dict((value, key) for key, value in enums.iteritems())
+    enums['_reverse'] = reverse
+    return type('Enum', (object,), enums)
+
+
 def is_identifier(text):
     return bool(_id_regex.match(text))
 
@@ -407,13 +414,14 @@ class EventQueue(object):
 class IhexRecord(Serializable):
     MAX_DATA_LENGTH = 16
     
-    class TypeEnum:
-        DATA                        = 0
-        END_OF_FILE                 = 1
-        EXTENDED_SEGMENT_ADDRESS    = 2
-        START_SEGMENT_ADDRESS       = 3
-        EXTENDED_LINEAR_ADDRESS     = 4
-        START_LINEAR_ADDRESS        = 5
+    TypeEnum = _enum(
+        'DATA',
+        'END_OF_FILE',
+        'EXTENDED_SEGMENT_ADDRESS',
+        'START_SEGMENT_ADDRESS',
+        'EXTENDED_LINEAR_ADDRESS',
+        'START_LINEAR_ADDRESS'
+    )
     
     
     def __init__(self, count=0, offset=0, type=None, data='', checksum=0):
@@ -525,45 +533,48 @@ class BootMsg(Message):
     MAX_LENGTH          = 30 + 1 
     
     
-    class TypeEnum:
-        NACK                =  0
-        ACK                 =  1
-        BEGIN_LOADER        =  2
-        END_LOADER          =  3
-        LINKING_SETUP       =  4
-        LINKING_ADDRESSES   =  5
-        LINKING_OUTCOME     =  6
-        IHEX_RECORD         =  7
-        REMOVE_LAST         =  8
-        REMOVE_ALL          =  9
-        BEGIN_APPINFO       = 10
-        END_APPINFO         = 11
-        APPINFO_SUMMARY     = 12
-        BEGIN_SETPARAM      = 13
-        END_SETPARAM        = 14
-        BEGIN_GETPARAM      = 15
-        END_GETPARAM        = 16
-        PARAM_REQUEST       = 17
-        PARAM_CHUNK         = 18
+    TypeEnum = _enum(
+        'NACK',
+        'ACK',
+        'BEGIN_LOADER',
+        'END_LOADER',
+        'LINKING_SETUP',
+        'LINKING_ADDRESSES',
+        'LINKING_OUTCOME',
+        'IHEX_RECORD',
+        'REMOVE_LAST',
+        'REMOVE_ALL',
+        'BEGIN_APPINFO',
+        'END_APPINFO',
+        'APPINFO_SUMMARY',
+        'BEGIN_SETPARAM',
+        'END_SETPARAM',
+        'BEGIN_GETPARAM',
+        'END_GETPARAM',
+        'PARAM_REQUEST',
+        'PARAM_CHUNK'
+    )
     
     
     class ErrorInfo(Serializable):
         MAX_TEXT_LENGTH = 20
         
-        class ReasonEnum:
-            UNKNOWN         = 0
-            NO_FREE_MEMORY  = 1
-            ZERO_LENGTH     = 2
-            OUT_OF_RANGE    = 3
+        ReasonEnum = _enum(
+            'UNKNOWN',
+            'NO_FREE_MEMORY',
+            'ZERO_LENGTH',
+            'OUT_OF_RANGE'
+        )
         
-        class TypeEnum:
-            NONE            = 0
-            TEXT            = 1
-            INTEGRAL        = 2
-            UINTEGRAL       = 3
-            ADDRESS         = 4
-            LENGTH          = 5
-            CHUNK           = 6
+        TypeEnum = _enum(
+            'NONE',
+            'TEXT',
+            'INTEGRAL',
+            'UINTEGRAL',
+            'ADDRESS',
+            'LENGTH',
+            'CHUNK'
+        )
         
         def __init__(self, line=0, reason=0, type=0, text='', integral=0, uintegral=0, address=0, length=0):
             super(BootMsg.ErrorInfo, self).__init__()
@@ -586,7 +597,7 @@ class BootMsg(Message):
             elif self.type == e.LENGTH:     value = 'length=0x%0.8X' % self.length
             elif self.type == e.CHUNK:      value = 'chunk(address=%d, length=%d)' % (self.address, self.length)
             else: raise ValueError('Unknown error type %d' % self.type)
-            return '%s(line=%d, reason=%d, type=0x%X, text=%s, integral=%d, uintegral=%d, address=0x%0.X, length=%d' % \
+            return '%s(line=%d, reason=%d, type=0x%X, text=%s, integral=%d, uintegral=%d, address=0x%0X, length=%d' % \
                    (type(self).__name__, self.line, self.reason, self.type, repr(self.text), self.integral, self.uintegral, self.address, self.length)
         
         def marshal(self):
@@ -631,7 +642,7 @@ class BootMsg(Message):
             
             
         def __repr__(self):
-            return '%s(pgmlen=0x%0.8X, bsslen=0x%0.8X, datalen=0x%0.8X, stacklen=0x%0.8X, name=%s, flags=0x%0.X)' % \
+            return '%s(pgmlen=0x%0.8X, bsslen=0x%0.8X, datalen=0x%0.8X, stacklen=0x%0.8X, name=%s, flags=0x%0X)' % \
                    (type(self).__name__, self.pgmlen, self.bsslen, self.datalen, self.stacklen, repr(self.name), self.flags)
             
         
@@ -934,20 +945,23 @@ class MgmtMsg(Message):
     MAX_PAYLOAD_LENGTH = 31
 
 
-    class TypeEnum:
-        RAW                         = 0x00
+    TypeEnum = _enum(
+        RAW                 = 0x00,
+
+        # Module messages
+        ALIVE               = 0x11,
+        STOP                = 0x12,
+        REBOOT              = 0x13,
+        BOOTLOAD            = 0x14,
     
-        INFO_MODULE                 = 0x10
-        INFO_ADVERTISEMENT          = 0x11
-        INFO_SUBSCRIPTION           = 0x12
+        # PubSub messages
+        ADVERTISE           = 0x21,
+        SUBSCRIBE_REQUEST   = 0x22,
+        SUBSCRIBE_RESPONSE  = 0x23,
     
-        CMD_ADVERTISE               = 0x20
-        CMD_SUBSCRIBE_REQUEST       = 0x21
-        CMD_SUBSCRIBE_RESPONSE      = 0x22
-        
-        CMD_STOP                    = 0x30
-        CMD_REBOOT                  = 0x31
-        CMD_BOOTLOAD                = 0x32
+        # Path messages
+        PATH                = 0x31
+    )
     
     
     class Path(Serializable):
@@ -975,47 +989,47 @@ class MgmtMsg(Message):
     
     
     class PubSub(Serializable):
-        def __init__(self, _MgmtMsg, topic='', transport=None, payload_size=0, queue_length=0, raw_params=''):
+        def __init__(self, _MgmtMsg, topic='', payload_size=0, queue_length=0, raw_params=''):
             super(MgmtMsg.PubSub, self).__init__()
             self._MgmtMsg = _MgmtMsg
             self.MAX_RAW_PARAMS_LENGTH = self._MgmtMsg.MAX_PAYLOAD_LENGTH - TOPIC_NAME_MAX_LENGTH - 4 - 1
             self.topic = topic
-            self.transport = transport
             self.payload_size = payload_size
             self.queue_length = queue_length
             self.raw_params = raw_params
         
         def __repr__(self):
-            if self.transport is not None:
-                tn = self.transport.name
-            else:
-                tn = 'None'
-            return '%s(MgmtMsg, topic=%s, transport=<%s>, payload_size=%d, queue_length=%d, raw_params=%s)' % \
-                   (type(self).__name__, repr(self.topic), tn, self.payload_size, self.queue_length, repr(self.raw_params))
+            return '%s(MgmtMsg, topic=%s, payload_size=%d, queue_length=%d, raw_params=%s)' % \
+                   (type(self).__name__, repr(self.topic), self.payload_size, self.queue_length, repr(self.raw_params))
         
         def marshal(self):
-            return struct.pack('<%dsLBB%ds' % (TOPIC_NAME_MAX_LENGTH, self.MAX_RAW_PARAMS_LENGTH),
-                               self.topic, 0, self.payload_size, self.queue_length, self.raw_params)
+            return struct.pack('<%dsBB%ds' % (TOPIC_NAME_MAX_LENGTH, self.MAX_RAW_PARAMS_LENGTH),
+                               self.topic, self.payload_size, self.queue_length, self.raw_params)
         
         def unmarshal(self, data, offset=0):
-            topic, transport, self.payload_size, self.queue_length, self.raw_params = \
-                struct.unpack_from('<%dsLBB%ds' % (TOPIC_NAME_MAX_LENGTH, self.MAX_RAW_PARAMS_LENGTH), data, offset)
-            self.transport = None
+            topic, self.payload_size, self.queue_length, self.raw_params = \
+                struct.unpack_from('<%dsBB%ds' % (TOPIC_NAME_MAX_LENGTH, self.MAX_RAW_PARAMS_LENGTH), data, offset)
             self.topic = topic.rstrip('\0')
     
     
     class Module(Serializable):
         
         class Flags(Serializable):
-            def __init__(self, intval=0):
+            def __init__(self, intval=0, stopped=None, rebooted=None, boot_mode=None):
                 super(MgmtMsg.Module.Flags, self).__init__()
-                self.stopped = bool(intval & (1 << 0))
+                intval = int(intval)
+                self.stopped = bool(stopped if stopped is not None else (intval & (1 << 0)))
+                self.rebooted = bool(rebooted if rebooted is not None else (intval & (1 << 1)))
+                self.boot_mode = bool(boot_mode if boot_mode is not None else (intval & (1 << 2)))
             
             def __int__(self):
-                return int(self.stopped)
+                return (int(self.stopped) << 0) | \
+                       (int(self.rebooted) << 1) | \
+                       (int(self.boot_mode) << 2)
             
             def __repr__(self):
-                return '%s(intval=0x%0.X)' % (type(self).__name__, self.intval)
+                return '%s(intval=0x%0X, stopped=%d, rebooted=%d, boot_mode=%d)' % \
+                       (type(self).__name__, int(self), self.stopped, self.rebooted, self.boot_mode)
             
             def marshal(self):
                 return struct.pack('<B', int(self))
@@ -1023,21 +1037,22 @@ class MgmtMsg(Message):
             def unmarshal(self, data, offset=0):
                 self.__init__(struct.unpack_from('<B', data, offset))
         
-        def __init__(self, _MgmtMsg, module='', flags=None):
+        def __init__(self, _MgmtMsg, name='', flags=None):
             super(MgmtMsg.Module, self).__init__()
             self._MgmtMsg = _MgmtMsg
-            self.module = module
+            self.name = name
             self.flags = flags if flags is not None else self.Flags()
         
         def __repr__(self):
-            return '%s(MgmtMsg, module=%s, flags=%s)' % (type(self).__name__, repr(self.module), repr(self.flags))
+            return '%s(MgmtMsg, name=%s, flags=%s)' % (type(self).__name__, repr(self.name), repr(self.flags))
         
         def marshal(self):
-            return struct.pack('<%ds' % MODULE_NAME_MAX_LENGTH, self.module) + self.flags.marshal()
-                               
+            return struct.pack('<%ds' % MODULE_NAME_MAX_LENGTH, self.name) + self.flags.marshal()
+        
         def unmarshal(self, data, offset=0):
-            self.module = struct.unpack_from('<%ds' % MODULE_NAME_MAX_LENGTH, data, offset).rstrip('\0')
-            self.flags.unmarshal(data, offset + MODULE_NAME_MAX_LENGTH)
+            name, intflags = struct.unpack_from('<%dsB' % MODULE_NAME_MAX_LENGTH, data, offset)
+            self.name = name.rstrip('\0')
+            self.flags.__init__(intval = intflags)
     
     
     def __init__(self, type=None):
@@ -1049,18 +1064,17 @@ class MgmtMsg(Message):
     
     
     def __repr__(self):
+        typename = type(self).__name__
         t = self.type
         e = MgmtMsg.TypeEnum
         if t in (e.RAW, ):
             subtext = ''
-        if t in (e.CMD_STOP, e.CMD_REBOOT, e.CMD_BOOTLOAD, e.INFO_MODULE):
-            subtext = ', module=' + repr(self.module)
-        elif t in (e.INFO_ADVERTISEMENT, e.INFO_SUBSCRIPTION):
-            subtext = ', path=' + repr(self.path)
-        elif t in (e.CMD_ADVERTISE, e.CMD_SUBSCRIBE_REQUEST, e.CMD_SUBSCRIBE_RESPONSE):
-            subtext = ', pubsub=' + repr(self.pubsub)
+        if t in (e.ALIVE, e.STOP, e.REBOOT, e.BOOTLOAD):
+            subtext = ', module=%s.%s' % (typename, repr(self.module))
+        elif t in (e.ADVERTISE, e.SUBSCRIBE_REQUEST, e.SUBSCRIBE_RESPONSE):
+            subtext = ', pubsub=%s.%s' % (typename, repr(self.pubsub))
         else: raise ValueError('Unknown management message subtype %d' % self.type)
-        return '%s(type=0x%X%s)' % (type(self).__name__, self.type, subtext)
+        return '%s(type=%s.TypeEnum.%s%s)' % (typename, typename, e._reverse[t], subtext)
     
     
     @staticmethod
@@ -1089,11 +1103,9 @@ class MgmtMsg(Message):
         e = MgmtMsg.TypeEnum
         if t in (e.RAW, ):
             bytes = ''
-        if t in (e.CMD_STOP, e.CMD_REBOOT, e.CMD_BOOTLOAD, e.INFO_MODULE):
+        if t in (e.ALIVE, e.STOP, e.REBOOT, e.BOOTLOAD):
             bytes = self.module.marshal()
-        elif t in (e.INFO_ADVERTISEMENT, e.INFO_SUBSCRIPTION):
-            bytes = self.path.marshal()
-        elif t in (e.CMD_ADVERTISE, e.CMD_SUBSCRIBE_REQUEST, e.CMD_SUBSCRIBE_RESPONSE):
+        elif t in (e.ADVERTISE, e.SUBSCRIBE_REQUEST, e.SUBSCRIBE_RESPONSE):
             bytes = self.pubsub.marshal()
         else: raise ValueError('Unknown management message subtype %d' % self.type)
         return struct.pack('<%dsB' % self.MAX_PAYLOAD_LENGTH, bytes, self.type)
@@ -1105,14 +1117,12 @@ class MgmtMsg(Message):
         e = MgmtMsg.TypeEnum
         if t in (e.RAW, ):
             pass
-        if t in (e.CMD_STOP, e.CMD_REBOOT, e.CMD_BOOTLOAD, e.INFO_MODULE):
+        if t in (e.ALIVE, e.STOP, e.REBOOT, e.BOOTLOAD):
             self.module.unmarshal(payload)
-        elif t in (e.INFO_ADVERTISEMENT, e.INFO_SUBSCRIPTION):
-            self.path.unmarshal(payload)
-        elif t in (e.CMD_ADVERTISE, e.CMD_SUBSCRIBE_REQUEST, e.CMD_SUBSCRIBE_RESPONSE):
+        elif t in (e.ADVERTISE, e.SUBSCRIBE_REQUEST, e.SUBSCRIBE_RESPONSE):
             self.pubsub.unmarshal(payload)
         else: raise ValueError('Unknown management message subtype %d' % t)
-        self.type = t      
+        self.type = t
         
 #==============================================================================
 
@@ -1446,28 +1456,6 @@ class Node(object):
             sub._r2p_net_path = '%s/%s/%s' % (mw.module_name, self.name, topic_name)
         
         
-    def publish_publishers(self, info_pub):
-        with self._publishers_lock:
-            for pub in self.publishers:
-                msg = info_pub.alloc()
-                msg.type = MgmtMsg.TypeEnum.INFO_ADVERTISEMENT
-                msg.path.module = Middleware.instance().module_name
-                msg.path.node = self.name
-                msg.path.topic = pub.topic.name
-                info_pub.publish_remotely(msg)
-        
-    
-    def publish_subscribers(self, info_pub):
-        with self._subscribers_lock:
-            for pub in self.subscribers:
-                msg = info_pub.alloc()
-                msg.type = MgmtMsg.TypeEnum.INFO_SUBSCRIPTION
-                msg.path.module = Middleware.instance().module_name
-                msg.path.node = self.name
-                msg.path.topic = pub.topic.name
-                info_pub.publish_remotely(msg)
-
-
     def notify(self, sub):
         self.notification_queue.signal(sub)
         
@@ -1498,15 +1486,6 @@ class Node(object):
 
 class Transport(object):
     
-    class TypeEnum:
-        MESSAGE                 = 0
-        ADVERTISEMENT           = 1
-        SUBSCRIPTION_REQUEST    = 2
-        SUBSCRIPTION_RESPONSE   = 3
-        STOP                    = 4
-        REBOOT                  = 5
-    
-    
     def __init__(self, name):
         assert is_node_name(name)
         self.name = name
@@ -1524,30 +1503,6 @@ class Transport(object):
         raise NotImplementedError()
     
         
-    def notify_advertisement(self, topic):
-        self._send_advertisement(topic)
-    
-    
-    def notify_subscription_request(self, topic):
-        self._send_subscription_request(topic)
-    
-    
-    def notify_subscription_response(self, topic):
-        self._send_subscription_response(topic)
-        
-        
-    def notify_stop(self):
-        self._send_stop()
-        
-        
-    def notify_reboot(self):
-        self._send_reboot()
-        
-        
-    def notify_bootload(self):
-        self._send_bootload()
-    
-    
     def touch_publisher(self, topic):
         with self._publishers_lock:
             for pub in self.publishers:
@@ -1600,33 +1555,9 @@ class Transport(object):
         raise NotImplementedError()
     
     
-    def _send_advertisement(self, topic):
-        raise NotImplementedError()
-    
-    
-    def _send_subscription_request(self, topic):
-        raise NotImplementedError()
-    
-    
-    def _send_subscription_response(self, topic):
-        raise NotImplementedError()
-    
-    
-    def _send_stop(self):
-        raise NotImplementedError()
-    
-    
-    def _send_reboot(self):
-        raise NotImplementedError()
-    
-    
-    def _send_bootload(self):
-        raise NotImplementedError()
-    
-    
     def _recv(self):
         raise NotImplementedError()
-        # return (type \[, 'topic', 'payload'\])
+        # return ('topic', 'payload')
         
         
     def _create_publisher(self, topic):
@@ -1681,7 +1612,7 @@ class Middleware(object):
         self.mgmt_topic = Topic('R2P', MgmtMsg)
         self.mgmt_thread = None
         self.mgmt_pub = Publisher()
-        self.mgmt_sub = Subscriber(5, self.mgmt_cb) # TODO: configure
+        self.mgmt_sub = Subscriber(5, self.mgmt_cb) # TODO: configure length
         
         self.boot_topic = Topic(self.bootloader_name, MgmtMsg)
         
@@ -1753,21 +1684,20 @@ class Middleware(object):
     
     def stop_remote(self, module_name):
         msg = self.mgmt_pub.alloc()
-        msg.clean(MgmtMsg.TypeEnum.CMD_STOP)
+        msg.clean(MgmtMsg.TypeEnum.STOP)
         msg.module.name = module_name
         self.mgmt_pub.publish_remotely(msg)
             
     
-    def reboot_remote(self, module_name, bootload_mode=False):
-        msg = self.mgmt_pub.alloc()
-        msg.clean()
-        msg.module.module = str(module_name)
-        
-        if bootload_mode:
-            msg.type = MgmtMsg.TypeEnum.CMD_BOOTLOAD
+    def reboot_remote(self, name, bootload=False):
+        if bootload:
+            type = MgmtMsg.TypeEnum.BOOTLOAD
         else:
-            msg.type = MgmtMsg.TypeEnum.CMD_REBOOT
+            type = MgmtMsg.TypeEnum.REBOOT
         
+        msg = self.mgmt_pub.alloc()
+        msg.clean(type)
+        msg.module.name = str(name)
         self.mgmt_pub.publish_remotely(msg)
     
     
@@ -1805,9 +1735,14 @@ class Middleware(object):
             pub.notify_advertised(topic)
             topic.advertise_local(pub, publish_timeout)
             logging.debug('Advertisement of %s by %s' % (repr(topic), repr(pub)))
-        
-        for transport in self.transports:
-            transport.notify_advertisement(topic)
+            try:
+                msg = self.mgmt_pub.alloc()
+            except Queue.Full:
+                return
+            msg.clean(MgmtMsg.TypeEnum.ADVERTISE)
+            msg.pubsub.topic = topic.name
+            msg.pubsub.payload_size = topic.get_payload_size()
+        self.mgmt_pub.publish_remotely(msg)
         
     
     def advertise_remote(self, pub, topic_name, publish_timeout, msg_type):
@@ -1817,9 +1752,6 @@ class Middleware(object):
             topic.advertise_remote(pub, publish_timeout)
             logging.debug('Advertisement of %s by %s' % (repr(topic), repr(pub)))
         
-        for transport in self.transports:
-            transport.notify_advertisement(topic)
-        
         
     def subscribe_local(self, sub, topic_name, msg_type):
         with self._topics_lock:
@@ -1827,9 +1759,15 @@ class Middleware(object):
             sub.notify_subscribed(topic)
             topic.subscribe_local(sub)
             logging.debug('Subscription of %s by %s' % (repr(topic), repr(sub)))
-        
-        for transport in self.transports:
-            transport.notify_subscription_request(topic)
+            try:
+                msg = self.mgmt_pub.alloc()
+            except Queue.Full:
+                pass
+            msg.clean(MgmtMsg.TypeEnum.SUBSCRIBE_REQUEST)
+            msg.pubsub.topic = topic.name
+            msg.pubsub.payload_size = topic.get_payload_size()
+            msg.pubsub.queue_length = topic.max_queue_length
+        self.mgmt_pub.publish_remotely(msg)
     
     
     def subscribe_remote(self, sub, topic_name, msg_type):
@@ -1881,27 +1819,42 @@ class Middleware(object):
 
 
     def mgmt_cb(self, msg):
-        if msg.type == MgmtMsg.TypeEnum.CMD_ADVERTISE:
-            logging.debug('CMD_ADVERTISE: %s' % repr(msg))
-            topic = self.find_topic(msg.pubsub.topic)
-            
-            if topic is not None and topic.has_local_subscribers():
-                msg.pubsub.transport.notify_subscription_request(topic)
+        logging.debug('Received ' + repr(msg))
         
-        if msg.type == MgmtMsg.TypeEnum.CMD_SUBSCRIBE_REQUEST:
-            logging.debug('CMD_SUBSCRIBE_REQUEST: %s' % repr(msg))
-            topic = self.find_topic(msg.pubsub.topic)
-            
-            if topic is not None and topic.has_local_publishers():
-                transport = msg.pubsub.transport
-                transport._subscribe_cb(topic, msg.pubsub.queue_length)
-                transport.notify_subscription_response(topic)
+        if msg.type == MgmtMsg.TypeEnum.ADVERTISE:
+            if self.mgmt_pub.topic is None: return
+            with self._topics_lock:
+                topic = self.find_topic(msg.pubsub.topic)
+                if topic is None: return
+                try:
+                    pub_msg = self.mgmt_pub.alloc()
+                except Queue.Full:
+                    return
+                pub_msg.clean(MgmtMsg.TypeEnum.ADVERTISE)
+                pub_msg.pubsub.topic = topic.name
+                pub_msg.pubsub.payload_size = topic.get_payload_size()
+            self.mgmt_pub.publish_remotely(pub_msg)
         
-        if msg.type == MgmtMsg.TypeEnum.CMD_SUBSCRIBE_RESPONSE:
-            logging.debug('CMD_SUBSCRIBE_RESPONSE: %s' % repr(msg))
+        if msg.type == MgmtMsg.TypeEnum.SUBSCRIBE_REQUEST:
+            if self.mgmt_pub.topic is None: return
+            with self._topics_lock:
+                topic = self.find_topic(msg.pubsub.topic)
+                if topic is None: return
+                msg._source._subscribe_cb(topic, msg.pubsub.queue_length)
+                try:
+                    sub_msg = self.mgmt_pub.alloc()
+                except Queue.Full:
+                    pass
+                sub_msg.clean(MgmtMsg.TypeEnum.SUBSCRIBE_REQUEST)
+                sub_msg.pubsub.topic = topic.name
+                sub_msg.pubsub.payload_size = topic.get_payload_size()
+                sub_msg.pubsub.queue_length = topic.max_queue_length
+            self.mgmt_pub.publish_remotely(sub_msg)
+        
+        if msg.type == MgmtMsg.TypeEnum.SUBSCRIBE_RESPONSE:
             topic = self.find_topic(msg.pubsub.topic)
-            transport = msg.pubsub.transport
-            transport._advertise_cb(topic, msg.pubsub.raw_params) 
+            if topic is None: return
+            msg._source._advertise_cb(topic, msg.pubsub.raw_params) 
     
     
     def mgmt_threadf(self):
@@ -2215,8 +2168,8 @@ class DebugTransport(Transport):
                 self._lineio.writeline('')
                 self._lineio.writeline('')
                 self._lineio.writeline('')
-                self._rx_thread = threading.Thread(name=(self.name + "_RX"), target=self._rx_threadf)
-                self._tx_thread = threading.Thread(name=(self.name + "_TX"), target=self._tx_threadf)
+                self._rx_thread = threading.Thread(name=(self.name + '_RX'), target=self._rx_threadf)
+                self._tx_thread = threading.Thread(name=(self.name + '_TX'), target=self._tx_threadf)
                 self._rx_thread.start()
                 self._tx_thread.start()
                 self.advertise(self._mgmt_rpub, 'R2P', Time.ms(200), MgmtMsg) #  TODO: configure
@@ -2263,102 +2216,6 @@ class DebugTransport(Transport):
         self._lineio.writeline(line)
     
     
-    def _send_advertisement(self, topic):
-        topic_name = topic.name
-        assert is_topic_name(topic_name)
-        module_name = Middleware.instance().module_name
-        assert is_module_name(module_name)
-        payload_size = topic.get_payload_size()
-        now_raw = Time.now().raw
-        cs = Checksummer()
-        cs.add_uint(now_raw)
-        cs.add_uint(0)
-        cs.add_bytes('p')
-        cs.add_uint(len(module_name))
-        cs.add_bytes(module_name)
-        cs.add_uint(len(topic_name))
-        cs.add_bytes(topic_name)
-        cs.add_uint(payload_size)
-        args = (now_raw, len(module_name), module_name,
-                len(topic_name), topic_name, payload_size,
-                cs.compute_checksum())
-        line = '@%.8X:00:p:%.2X%s:%.2X%s:%0.4X:%0.2X' % args
-        self._lineio.writeline(line)
-    
-    
-    def _send_subscription_request(self, topic):
-        topic_name = topic.name
-        with topic.get_lock():
-            queue_length = topic.max_queue_length
-        assert is_topic_name(topic_name)
-        assert 0 < queue_length < 256
-        module_name = Middleware.instance().module_name
-        assert is_module_name(module_name)
-        payload_size = topic.get_payload_size()
-        now_raw = Time.now().raw
-        cs = Checksummer()
-        cs.add_uint(now_raw)
-        cs.add_uint(0)
-        cs.add_bytes('s')
-        cs.add_uint(queue_length)
-        cs.add_uint(len(module_name))
-        cs.add_bytes(module_name)
-        cs.add_uint(len(topic_name))
-        cs.add_bytes(topic_name)
-        cs.add_uint(payload_size)
-        args = (now_raw, queue_length,
-                len(module_name), module_name,
-                len(topic_name), topic_name, payload_size,
-                cs.compute_checksum())
-        line = '@%.8X:00:s%.2X:%.2X%s:%.2X%s:%0.4X:%0.2X' % args
-        self._lineio.writeline(line)
-    
-    
-    def _send_subscription_response(self, topic):
-        topic_name = topic.name
-        assert is_topic_name(topic_name)
-        assert 0 < len(topic_name) < 256
-        module_name = Middleware.instance().module_name
-        assert 0 < len(module_name) <= 7
-        payload_size = topic.get_payload_size()
-        now_raw = Time.now().raw
-        cs = Checksummer()
-        cs.add_uint(now_raw)
-        cs.add_uint(0)
-        cs.add_bytes('e')
-        cs.add_uint(len(module_name))
-        cs.add_bytes(module_name)
-        cs.add_uint(len(topic_name))
-        cs.add_bytes(topic_name)
-        cs.add_uint(payload_size)
-        args = (now_raw, len(module_name), module_name,
-                len(topic_name), topic_name, payload_size,
-                cs.compute_checksum())
-        line = '@%.8X:00:e:%.2X%s:%.2X%s:%0.4X:%0.2X' % args
-        self._lineio.writeline(line)
-        
-        
-    def _send_signal_msg(self, signal_id):
-        now_raw = Time.now().raw
-        cs = Checksummer()
-        cs.add_uint(now_raw)
-        cs.add_bytes(signal_id)
-        line = '@%0.8X:00:%s:%0.2X' % (now_raw, signal_id, cs.compute_checksum())
-        self._lineio.writeline(line)
-    
-    
-    def _send_stop(self):
-        self._send_signal_msg('t')
-    
-    
-    def _send_reboot(self):
-        self._send_signal_msg('r')
-    
-    
-    def _send_bootload(self):
-        self._send_signal_msg('b')
-    
-        
     def _recv(self):
         cs = Checksummer()
         while True:
@@ -2378,121 +2235,24 @@ class DebugTransport(Transport):
         
         parser.expect_char(':')
         length = parser.read_unsigned(1)
+        if length == 0:
+            raise ValueError('length == 0')
         topic = parser.read_string(length)
         cs.add_uint(length)
         cs.add_bytes(topic)
         
         parser.expect_char(':')
-        if length > 0: # Normal message
-            length = parser.read_unsigned(1)
-            payload = parser.read_bytes(length)
-            cs.add_uint(length)
-            cs.add_bytes(payload)
-            
-            parser.expect_char(':')
-            checksum = parser.read_unsigned(1)
-            cs.check(checksum)
-            
-            parser.check_eol()
-            return (Transport.TypeEnum.MESSAGE, topic, payload)
+        length = parser.read_unsigned(1)
+        payload = parser.read_bytes(length)
+        cs.add_uint(length)
+        cs.add_bytes(payload)
         
-        else: # Management message
-            typechar = parser.read_char().lower()
-            cs.add_uint(ord(typechar))
-            
-            if typechar == 'p':
-                parser.expect_char(':')
-                length = parser.read_unsigned(1)
-                module = parser.read_string(length)
-                cs.add_uint(length)
-                cs.add_bytes(module)
-                
-                parser.expect_char(':')
-                length = parser.read_unsigned(1)
-                topic = parser.read_string(length)
-                cs.add_uint(length)
-                cs.add_bytes(topic)
-                
-                parser.expect_char(':')
-                payload_size = parser.read_unsigned(2)
-                cs.add_uint(payload_size)
-                
-                parser.expect_char(':')
-                checksum = parser.read_unsigned(1)
-                cs.check(checksum)
-                
-                parser.check_eol()
-                return (Transport.TypeEnum.ADVERTISEMENT, topic, payload_size)
-            
-            elif typechar == 's':
-                queue_length = parser.read_unsigned(1)
-                cs.add_uint(queue_length)
-                
-                parser.expect_char(':')
-                length = parser.read_unsigned(1)
-                module = parser.read_string(length)
-                cs.add_uint(length)
-                cs.add_bytes(module)
-                
-                parser.expect_char(':')
-                length = parser.read_unsigned(1)
-                topic = parser.read_string(length)
-                cs.add_uint(length)
-                cs.add_bytes(topic)
-                
-                parser.expect_char(':')
-                payload_size = parser.read_unsigned(2)
-                cs.add_uint(payload_size)
-                
-                parser.expect_char(':')
-                checksum = parser.read_unsigned(1)
-                cs.check(checksum)
-                
-                parser.check_eol()
-                return (Transport.TypeEnum.SUBSCRIPTION_REQUEST, topic, payload_size, queue_length)
-            
-            elif typechar == 'e':
-                parser.expect_char(':')
-                length = parser.read_unsigned(1)
-                module = parser.read_string(length)
-                cs.add_uint(length)
-                cs.add_bytes(module)
-                
-                parser.expect_char(':')
-                length = parser.read_unsigned(1)
-                topic = parser.read_string(length)
-                cs.add_uint(length)
-                cs.add_bytes(topic)
-                
-                parser.expect_char(':')
-                payload_size = parser.read_unsigned(2)
-                cs.add_uint(payload_size)
-                
-                parser.expect_char(':')
-                checksum = parser.read_unsigned(1)
-                cs.check(checksum)
-                
-                parser.check_eol()
-                return (Transport.TypeEnum.SUBSCRIPTION_RESPONSE, topic, payload_size)
-            
-            elif typechar == 't':
-                parser.expect_char(':')
-                checksum = parser.read_unsigned(1)
-                cs.check(checksum)
-                
-                parser.check_eol()
-                return (Transport.TypeEnum.STOP,)
-            
-            elif typechar == 'r':
-                parser.expect_char(':')
-                checksum = parser.read_unsigned(1)
-                cs.check(checksum)
-                
-                parser.check_eol()
-                return (Transport.TypeEnum.REBOOT,)
-            
-            else:
-                raise ValueError("Unknown management message type %s" % repr(typechar))
+        parser.expect_char(':')
+        checksum = parser.read_unsigned(1)
+        cs.check(checksum)
+        
+        parser.check_eol()
+        return (topic, payload)
         
         
     def _create_publisher(self, topic):
@@ -2512,74 +2272,34 @@ class DebugTransport(Transport):
         try:
             while self._is_running():
                 try:
-                    fields = self._recv()
+                    topic_name, payload = self._recv()
                 except (ParserError, ValueError) as e:
                     logging.debug(str(e))
                     continue
                 
-                if fields is None:
-                    break
-                t = fields[0]
+                topic = Middleware.instance().find_topic(topic_name)
+                if topic is None:
+                    continue
                 
-                if t == Transport.TypeEnum.MESSAGE:
-                    topic = Middleware.instance().find_topic(fields[1])
-                    if topic is None:
+                with self._publishers_lock:
+                    for rpub in self.publishers:
+                        if rpub.topic is topic:
+                            break
+                    else:
                         continue
+                try:
+                    msg = rpub.alloc()
+                    msg.unmarshal(payload)
+                    msg._source = self
+                    rpub.publish_locally(msg)
                     
-                    with self._publishers_lock:
-                        for rpub in self.publishers:
-                            if rpub.topic is topic:
-                                break
-                        else:
-                            continue
-                    try:
-                        msg = rpub.alloc()
-                        msg.unmarshal(fields[2])
-                        msg._source = self
-                        rpub.publish_locally(msg)
-                    except Queue.Full:
-                        logging.warning('Full %s' % repr(rpub))
-                        pass
-                    except Exception as e: # suppress errors
-                        topic.release(msg) # TODO: Create BasePublisher.release() like BaseSubscriber.release()
-                        logging.warning(e)
-                
-                elif t == Transport.TypeEnum.ADVERTISEMENT:
-                    assert is_topic_name(fields[1])
-                    msg = self._mgmt_rpub.alloc()
-                    msg.type = MgmtMsg.TypeEnum.CMD_ADVERTISE
-                    msg.pubsub.topic = fields[1]
-                    msg.pubsub.transport = self
-                    msg.pubsub.payload_size = fields[2]
-                    self._mgmt_rpub.publish_locally(msg)
-                
-                elif t == Transport.TypeEnum.SUBSCRIPTION_REQUEST:
-                    assert is_topic_name(fields[1])
-                    msg = self._mgmt_rpub.alloc()
-                    msg.type = MgmtMsg.TypeEnum.CMD_SUBSCRIBE_REQUEST
-                    msg.pubsub.topic = fields[1]
-                    msg.pubsub.transport = self
-                    msg.pubsub.payload_size = fields[2]
-                    msg.pubsub.queue_length = fields[3]
-                    self._mgmt_rpub.publish_locally(msg)
-                
-                elif t == Transport.TypeEnum.SUBSCRIPTION_RESPONSE:
-                    assert is_topic_name(fields[1])
-                    msg = self._mgmt_rpub.alloc()
-                    msg.type = MgmtMsg.TypeEnum.CMD_SUBSCRIBE_RESPONSE
-                    msg.pubsub.topic = fields[1]
-                    msg.pubsub.payload_size = fields[2]
-                    msg.pubsub.transport = self
-                    self._mgmt_rpub.publish_locally(msg)
-                
-                elif t == Transport.TypeEnum.STOP:
-                    Middleware.instance().stop()
-                
-                elif t == Transport.TypeEnum.REBOOT:
+                except Queue.Full:
+                    logging.warning('Full %s' % repr(rpub))
                     pass
                 
-                else:
-                    raise RuntimeError('Unknown transport message %d' % fields[0])
+                except Exception as e: # suppress errors
+                    topic.release(msg) # TODO: Create BasePublisher.release() like BaseSubscriber.release()
+                    logging.warning(e)
         
         except KeyboardInterrupt:
             logging.debug('_rx_threadf interrupted manually')
@@ -2616,9 +2336,11 @@ class DebugTransport(Transport):
 
 class BootloaderMaster(object):
     
-    def __init__(self, boot_pub, boot_sub):
+    def __init__(self, boot_pub, boot_sub, boot_module):
+        assert boot_pub.topic is boot_sub.topic
         self._pub = boot_pub
         self._sub = boot_sub
+        self._module = str(boot_module)
     
     
     def initialize(self):
@@ -2628,10 +2350,11 @@ class BootloaderMaster(object):
         
         # Sync with target board
         logging.info('Awaiting target bootloader with topic %s' % repr(boot_topic.name))
-        
         while not boot_topic.has_remote_publishers() and \
               not boot_topic.has_remote_subscribers():
-            time.sleep(0.500) # TODO: configure
+            Middleware.instance().reboot_remote(self._module, True)
+            time.sleep(2.000) # TODO: configure
+            logging.debug('Awaiting target bootloader with topic %s' % repr(boot_topic.name))
         
         while True:
             try:

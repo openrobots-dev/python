@@ -30,6 +30,11 @@ def _create_argsparser():
         help='reboots in bootloader mode',
         dest='boot_mode'
     )
+    group.add_argument(
+        '-e', '--boot-module', required=True,
+        help='name of the target R2P module; format: "[\\w]{1,%d}"' % r2p.MODULE_NAME_MAX_LENGTH,
+        dest='boot_module_name', metavar='BOOT_MODULE'
+    )
     
     return parser
 
@@ -52,16 +57,13 @@ def _main():
     
     try:
         exception = None
-        mw.initialize('R2PY') # TODO: pre_init(), post_init()
+        mw.initialize('R2PY')
         transport.open()
-        transport.notify_stop()
         
-        if args.boot_mode:
-            logging.info('Rebooting target module in bootloader mode')
-            transport.notify_bootload()
-        else:
-            logging.info('Rebooting target module')
-            transport.notify_reboot()
+        time.sleep(0.200)
+        mode_str = 'bootloader' if args.boot_mode else 'normal'
+        logging.info('Rebooting module %s in %s mode' % (repr(args.boot_module_name), mode_str))
+        mw.reboot_remote(args.boot_module_name, args.boot_mode)
         
     except KeyboardInterrupt as exception:
         pass

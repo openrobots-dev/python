@@ -127,7 +127,7 @@ def _main():
     node = r2p.Node('LOADER')
     pub = r2p.Publisher()
     sub = r2p.Subscriber(4)
-    bootloader = r2p.BootloaderMaster(pub, sub)
+    bootloader = r2p.BootloaderMaster(pub, sub, args.boot_module_name)
     
     try:
         exception = None

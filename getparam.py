@@ -30,6 +30,11 @@ def _create_argsparser():
         help='name of the bootloader topic for the target R2P module; format: "[\\w]{1,%d}"' % r2p.MODULE_NAME_MAX_LENGTH,
         dest='boot_topic_name', metavar='BOOT_TOPIC'
     )
+    group.add_argument(
+        '-e', '--boot-module', required=True,
+        help='name of the target R2P module; format: "[\\w]{1,%d}"' % r2p.MODULE_NAME_MAX_LENGTH,
+        dest='boot_module_name', metavar='BOOT_MODULE'
+    )
     
     group = parser.add_argument_group('parameter setup')
     group.add_argument(
@@ -77,7 +82,7 @@ def _main():
     node = r2p.Node('GETPAR')
     pub = r2p.Publisher()
     sub = r2p.Subscriber(4)
-    bootloader = r2p.BootloaderMaster(pub, sub)
+    bootloader = r2p.BootloaderMaster(pub, sub, args.boot_module_name)
     
     try:
         exception = None
@@ -88,10 +93,11 @@ def _main():
         node.advertise(pub, args.boot_topic_name, r2p.Time_INFINITE, r2p.BootMsg)
         node.subscribe(sub, args.boot_topic_name, r2p.BootMsg)
         
-        time.sleep(1.000)
-        transport.notify_bootload()
+        time.sleep(0.200)
+        mw.reboot_remote(args.boot_module_name, True)
+        time.sleep(2.000)
         bootloader.initialize()
-        time.sleep(1.000)
+        time.sleep(0.200)
         
         bytes = bootloader.get_parameter(app_name = str(args.app_name),
                                          offset = autoint(args.offset),
