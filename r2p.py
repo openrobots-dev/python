@@ -516,6 +516,10 @@ class Message(Serializable):
         self._source = None
     
     
+    def __repr__(self):
+        return '%s(_source=%s, _payload_size=0x%0X)' % (type(self).__name__, repr(self._source), self.get_payload_size())
+    
+    
     @staticmethod
     def get_type_size():
         raise NotImplementedError()
@@ -588,17 +592,19 @@ class BootMsg(Message):
             self.length = length
         
         def __repr__(self):
+            t = self.type
             e = self.TypeEnum
-            if   self.type == e.NONE:       value = 'empty'
-            elif self.type == e.TEXT:       value = 'text=%s' % repr(self.text)
-            elif self.type == e.INTEGRAL:   value = 'integral=%d' % self.integral
-            elif self.type == e.UINTEGRAL:  value = 'uintegral=%d' % self.uintegral
-            elif self.type == e.ADDRESS:    value = 'address=0x%0.8X' % self.address
-            elif self.type == e.LENGTH:     value = 'length=0x%0.8X' % self.length
-            elif self.type == e.CHUNK:      value = 'chunk(address=%d, length=%d)' % (self.address, self.length)
-            else: raise ValueError('Unknown error type %d' % self.type)
-            return '%s(line=%d, reason=%d, type=0x%X, text=%s, integral=%d, uintegral=%d, address=0x%0X, length=%d' % \
-                   (type(self).__name__, self.line, self.reason, self.type, repr(self.text), self.integral, self.uintegral, self.address, self.length)
+            if   t == e.NONE:       value = 'empty'
+            elif t == e.TEXT:       value = 'text=%s' % repr(self.text)
+            elif t == e.INTEGRAL:   value = 'integral=%d' % self.integral
+            elif t == e.UINTEGRAL:  value = 'uintegral=%d' % self.uintegral
+            elif t == e.ADDRESS:    value = 'address=0x%0.8X' % self.address
+            elif t == e.LENGTH:     value = 'length=0x%0.8X' % self.length
+            elif t == e.CHUNK:      value = 'chunk(address=%d, length=%d)' % (self.address, self.length)
+            else: raise ValueError('Unknown error type %d' % t)
+            typename = type(self).__name__
+            return '%s(line=%d, reason=%d, type=%s.TypeEnum.%s, text=%s, integral=%d, uintegral=%d, address=0x%0X, length=%d' % \
+                   (typename, self.line, self.reason, typename, e._reverse[t], repr(self.text), self.integral, self.uintegral, self.address, self.length)
         
         def marshal(self):
             bytes = struct.pack('<HBB', self.line, self.reason, self.type)
@@ -813,7 +819,8 @@ class BootMsg(Message):
         elif t == e.PARAM_REQUEST:      subtext = ', param_request=' + repr(self.param_request)
         elif t == e.PARAM_CHUNK:        subtext = ', param_chunk=' + repr(self.param_chunk)
         else: raise ValueError('Unknown bootloader message subtype %d' % t)
-        return '%s(type=0x%X%s)' % (type(self).__name__, self.type, subtext)
+        typename = type(self).__name__
+        return '%s(type=%s.TypeEnum.%s%s)' % (typename, typename, e._reverse[t], subtext)
     
     
     @staticmethod
@@ -1819,9 +1826,22 @@ class Middleware(object):
 
 
     def mgmt_cb(self, msg):
-        logging.debug('Received ' + repr(msg))
-        
         if msg.type == MgmtMsg.TypeEnum.ADVERTISE:
+            if self.mgmt_pub.topic is None: return
+            with self._topics_lock:
+                topic = self.find_topic(msg.pubsub.topic)
+                if topic is None: return
+                try:
+                    sub_msg = self.mgmt_pub.alloc()
+                except Queue.Full:
+                    return
+                sub_msg.clean(MgmtMsg.TypeEnum.SUBSCRIBE_REQUEST)
+                sub_msg.pubsub.topic = topic.name
+                sub_msg.pubsub.payload_size = topic.get_payload_size()
+                sub_msg.pubsub.queue_length = topic.max_queue_length
+            self.mgmt_pub.publish_remotely(sub_msg)
+        
+        if msg.type == MgmtMsg.TypeEnum.SUBSCRIBE_REQUEST:
             if self.mgmt_pub.topic is None: return
             with self._topics_lock:
                 topic = self.find_topic(msg.pubsub.topic)
@@ -1829,27 +1849,12 @@ class Middleware(object):
                 try:
                     pub_msg = self.mgmt_pub.alloc()
                 except Queue.Full:
-                    return
-                pub_msg.clean(MgmtMsg.TypeEnum.ADVERTISE)
+                    pass
+                pub_msg.clean(MgmtMsg.TypeEnum.SUBSCRIBE_RESPONSE)
                 pub_msg.pubsub.topic = topic.name
                 pub_msg.pubsub.payload_size = topic.get_payload_size()
             self.mgmt_pub.publish_remotely(pub_msg)
-        
-        if msg.type == MgmtMsg.TypeEnum.SUBSCRIBE_REQUEST:
-            if self.mgmt_pub.topic is None: return
-            with self._topics_lock:
-                topic = self.find_topic(msg.pubsub.topic)
-                if topic is None: return
-                msg._source._subscribe_cb(topic, msg.pubsub.queue_length)
-                try:
-                    sub_msg = self.mgmt_pub.alloc()
-                except Queue.Full:
-                    pass
-                sub_msg.clean(MgmtMsg.TypeEnum.SUBSCRIBE_REQUEST)
-                sub_msg.pubsub.topic = topic.name
-                sub_msg.pubsub.payload_size = topic.get_payload_size()
-                sub_msg.pubsub.queue_length = topic.max_queue_length
-            self.mgmt_pub.publish_remotely(sub_msg)
+            msg._source._subscribe_cb(topic, msg.pubsub.queue_length)
         
         if msg.type == MgmtMsg.TypeEnum.SUBSCRIBE_RESPONSE:
             topic = self.find_topic(msg.pubsub.topic)
@@ -1948,12 +1953,12 @@ class SerialLineIO(LineIO):
                 if line[-2:] == self._newline:
                     break
         line = line[:-2]
-        logging.debug("%s >>> %s" % (repr(self._dev_path), repr(line)))
+        # XXX logging.debug("%s --->>> %s" % (repr(self._dev_path), repr(line)))
         return line
     
     
     def writeline(self, line):
-        logging.debug("%s <<< %s" % (repr(self._dev_path), repr(line)))
+        # XXX logging.debug("%s <<<--- %s" % (repr(self._dev_path), repr(line)))
         with self._write_lock:
             self._to.write(unicode(line))
             self._to.write(u'\n')
@@ -1984,13 +1989,13 @@ class StdLineIO(LineIO):
     def readline(self):
         with self._read_lock:
             line = raw_input()
-            logging.debug("stdin >>> %s" % repr(line))
+            logging.debug("stdin --->>> %s" % repr(line))
         return line
     
     
     def writeline(self, line):
         with self._write_lock:
-            logging.debug("stdout <<< %s" % repr(line))
+            logging.debug("stdout <<<--- %s" % repr(line))
             print line
 
 #==============================================================================
@@ -2023,12 +2028,12 @@ class TCPLineIO(LineIO):
     
     def readline(self):
         line = self._fp.readline().rstrip('\r\n')
-        logging.debug("'%s:%d' >>> %s" % (self._address, self._port, repr(line)))
+        logging.debug("'%s:%d' --->>> %s" % (self._address, self._port, repr(line)))
         return line
     
     
     def writeline(self, line):
-        logging.debug("'%s:%d' <<< %s" % (self._address, self._port, repr(line)))
+        logging.debug("'%s:%d' <<<--- %s" % (self._address, self._port, repr(line)))
         self._fp.write(line)
         self._fp.write('\r\n')
         self._fp.flush()
@@ -2291,6 +2296,7 @@ class DebugTransport(Transport):
                     msg = rpub.alloc()
                     msg.unmarshal(payload)
                     msg._source = self
+                    logging.debug('--->>> %s' % repr(msg))
                     rpub.publish_locally(msg)
                     
                 except Queue.Full:
@@ -2321,6 +2327,7 @@ class DebugTransport(Transport):
                 
                 msg, deadline = sub.fetch()
                 try:
+                    logging.debug('<<<--- %s' % repr(msg))
                     self._send_message(sub.topic.name, msg.marshal())
                 finally:
                     sub.release(msg)
@@ -2353,7 +2360,7 @@ class BootloaderMaster(object):
         while not boot_topic.has_remote_publishers() and \
               not boot_topic.has_remote_subscribers():
             Middleware.instance().reboot_remote(self._module, True)
-            time.sleep(2.000) # TODO: configure
+            time.sleep(10.000) # TODO: configure
             logging.debug('Awaiting target bootloader with topic %s' % repr(boot_topic.name))
         
         while True:
@@ -2363,22 +2370,22 @@ class BootloaderMaster(object):
                 time.sleep(0.500) # TODO: configure
                 self._fetch_release(BootMsg.TypeEnum.NACK, blocking_delay=None)
                 break
+            
             except Queue.Empty:
+                # XXX Middleware.instance().reboot_remote(self._module, True)
+                # time.sleep(10.000) # TODO: configure
                 continue
+            
             except Exception as e:
                 logging.debug('Ignoring last received message (broken from previous communication?)')
                 break
         
         while True:
             try:
-                time.sleep(0.500) # TODO: configure
-                self._alloc_publish(BootMsg.TypeEnum.NACK)
-                time.sleep(0.500) # TODO: configure
-                self._fetch_release(BootMsg.TypeEnum.NACK)
+                self._fetch_release(BootMsg.TypeEnum.NACK, blocking_delay=None)
+            except Queue.Empty:
                 break
-            except ValueError:
-                logging.debug('Ignoring last received message (broken from previous communication?)')
-            
+                
         logging.info('Target bootloader alive')
     
     
