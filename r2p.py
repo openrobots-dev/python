@@ -810,6 +810,9 @@ class BootMsg(Message):
         subtext = ''
         t = self.type
         e = BootMsg.TypeEnum
+        if t not in e._reverse:
+            raise ValueError('Unknown bootloader message subtype %s' % t)
+        subtext = ''
         if   t == e.NACK:               subtext = ', error_info=' + repr(self.error_info)
         elif t == e.LINKING_SETUP:      subtext = ', linking_setup=' + repr(self.linking_setup)
         elif t == e.LINKING_ADDRESSES:  subtext = ', linking_addresses=' + repr(self.linking_addresses)
@@ -818,7 +821,6 @@ class BootMsg(Message):
         elif t == e.APPINFO_SUMMARY:    subtext = ', appinfo_summary=' + repr(self.appinfo_summary)
         elif t == e.PARAM_REQUEST:      subtext = ', param_request=' + repr(self.param_request)
         elif t == e.PARAM_CHUNK:        subtext = ', param_chunk=' + repr(self.param_chunk)
-        else: raise ValueError('Unknown bootloader message subtype %d' % t)
         typename = type(self).__name__
         return '%s(type=%s.TypeEnum.%s%s)' % (typename, typename, e._reverse[t], subtext)
     
@@ -996,10 +998,11 @@ class MgmtMsg(Message):
     
     
     class PubSub(Serializable):
+        MAX_RAW_PARAMS_LENGTH = 10
+            
         def __init__(self, _MgmtMsg, topic='', payload_size=0, queue_length=0, raw_params=''):
             super(MgmtMsg.PubSub, self).__init__()
             self._MgmtMsg = _MgmtMsg
-            self.MAX_RAW_PARAMS_LENGTH = self._MgmtMsg.MAX_PAYLOAD_LENGTH - TOPIC_NAME_MAX_LENGTH - 4 - 1
             self.topic = topic
             self.payload_size = payload_size
             self.queue_length = queue_length
@@ -1007,16 +1010,18 @@ class MgmtMsg(Message):
         
         def __repr__(self):
             return '%s(MgmtMsg, topic=%s, payload_size=%d, queue_length=%d, raw_params=%s)' % \
-                   (type(self).__name__, repr(self.topic), self.payload_size, self.queue_length, repr(self.raw_params))
+                   (type(self).__name__, repr(self.topic), self.payload_size, self.queue_length,
+                    repr(self.raw_params.ljust(self.MAX_RAW_PARAMS_LENGTH, '\0')))
         
         def marshal(self):
-            return struct.pack('<%dsBB%ds' % (TOPIC_NAME_MAX_LENGTH, self.MAX_RAW_PARAMS_LENGTH),
+            return struct.pack('<%dsHH%ds' % (TOPIC_NAME_MAX_LENGTH, self.MAX_RAW_PARAMS_LENGTH),
                                self.topic, self.payload_size, self.queue_length, self.raw_params)
         
         def unmarshal(self, data, offset=0):
-            topic, self.payload_size, self.queue_length, self.raw_params = \
-                struct.unpack_from('<%dsBB%ds' % (TOPIC_NAME_MAX_LENGTH, self.MAX_RAW_PARAMS_LENGTH), data, offset)
+            topic, self.payload_size, self.queue_length, raw_params = \
+                struct.unpack_from('<%dsHH%ds' % (TOPIC_NAME_MAX_LENGTH, self.MAX_RAW_PARAMS_LENGTH), data, offset)
             self.topic = topic.rstrip('\0')
+            self.raw_params = raw_params.ljust(self.MAX_RAW_PARAMS_LENGTH, '\0')
     
     
     class Module(Serializable):
@@ -1509,13 +1514,17 @@ class Transport(object):
     def close(self):
         raise NotImplementedError()
     
+    
+    def fill_raw_params(self, topic):
+        return ''.ljust(MgmtMsg.PubSub.MAX_RAW_PARAMS_LENGTH, '\xAA')
+    
         
-    def touch_publisher(self, topic):
+    def touch_publisher(self, topic, raw_params):
         with self._publishers_lock:
             for pub in self.publishers:
                 if pub.has_topic(topic.name):
                     return pub
-            pub = self._create_publisher(topic)
+            pub = self._create_publisher(topic, raw_params)
             path = '%s/(%s)/%s' % (Middleware.instance().module_name, self.name, topic.name)
             pub.notify_advertised(topic, path)
             topic.advertise_remote(pub, Time_INFINITE)
@@ -1527,23 +1536,26 @@ class Transport(object):
         with self._publishers_lock:
             for sub in self.subscribers:
                 if sub.has_topic(topic.name):
-                    return sub
-            sub = self._create_subscriber(topic, queue_length)
+                    raw_params = self.fill_raw_params(topic)
+                    return (sub, raw_params)
+            sub, raw_params = self._create_subscriber(topic, queue_length)
             path = '%s/(%s)/%s' % (Middleware.instance().module_name, self.name, topic.name)
             sub.notify_subscribed(topic, path)
             topic.subscribe_remote(sub)
             self.subscribers.append(sub)
-            return sub
+            return (sub, raw_params)
     
     
     def _advertise_cb(self, topic, raw_params):
         if topic.has_local_subscribers():
-            self.touch_publisher(topic)
+            return self.touch_publisher(topic, raw_params)
+        return None
     
     
     def _subscribe_cb(self, topic, queue_length):
         if topic.has_local_publishers():
-            self.touch_subscriber(topic, queue_length)
+            return self.touch_subscriber(topic, queue_length)
+        return None
     
     
     def advertise(self, pub, topic_name, publish_timeout, msg_type):
@@ -1567,7 +1579,7 @@ class Transport(object):
         # return ('topic', 'payload')
         
         
-    def _create_publisher(self, topic):
+    def _create_publisher(self, topic, raw_params):
         raise NotImplementedError()
         # return XxxPublisher<RemotePublisher>()
         
@@ -1849,17 +1861,18 @@ class Middleware(object):
                 try:
                     pub_msg = self.mgmt_pub.alloc()
                 except Queue.Full:
-                    pass
+                    return
                 pub_msg.clean(MgmtMsg.TypeEnum.SUBSCRIBE_RESPONSE)
                 pub_msg.pubsub.topic = topic.name
                 pub_msg.pubsub.payload_size = topic.get_payload_size()
+            rsub, raw_params = msg._source._subscribe_cb(topic, msg.pubsub.queue_length)
+            pub_msg.pubsub.raw_params = raw_params
             self.mgmt_pub.publish_remotely(pub_msg)
-            msg._source._subscribe_cb(topic, msg.pubsub.queue_length)
         
         if msg.type == MgmtMsg.TypeEnum.SUBSCRIBE_RESPONSE:
             topic = self.find_topic(msg.pubsub.topic)
             if topic is None: return
-            msg._source._advertise_cb(topic, msg.pubsub.raw_params) 
+            rpub = msg._source._advertise_cb(topic, msg.pubsub.raw_params) 
     
     
     def mgmt_threadf(self):
@@ -2260,12 +2273,15 @@ class DebugTransport(Transport):
         return (topic, payload)
         
         
-    def _create_publisher(self, topic):
-        return DebugPublisher(self)
+    def _create_publisher(self, topic, raw_params):
+        rpub = DebugPublisher(self)
+        return rpub
         
         
     def _create_subscriber(self, topic, queue_length):
-        return DebugSubscriber(self, queue_length)
+        rsub = DebugSubscriber(self, queue_length)
+        raw_params = self.fill_raw_params(topic)
+        return (rsub, raw_params)
     
     
     def _is_running(self):

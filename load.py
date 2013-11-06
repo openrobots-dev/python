@@ -177,9 +177,6 @@ def _main():
 
 if __name__ == '__main__':
     try:
-        # os.chdir('/home/texzk/openrobots/Middleware/apps/pub_led')
-        # sys.argv = ['/home/texzk/openrobots/python/load.py', '-vvvv', '--boot-topic', 'BOOT_IMU_GW', '--boot-module', 'IMU_GW', '--app-name', 'pub_led', '--app-stack-size', '1024', '--sys-elf', '/home/texzk/openrobots/R2P_IMU_test_mw/build/ch.elf', '--app-elf', 'build/pub_led.elf', '--app-hex', 'build/pub_led.hex', '--ld-cmd', 'arm-none-eabi-ld', '--ld-script', '/home/texzk/openrobots/R2P_IMU_test_mw/STM32F103xB_bootloader.ld', '--ld-map', 'build/pub_led.map', '--ld-objects', 'build/obj/common.o', 'build/obj/pub_led.o']
-
         _main()
     except Exception as e:
         raise
